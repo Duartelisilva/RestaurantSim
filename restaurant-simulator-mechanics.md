@@ -82,6 +82,15 @@ P(complain) = min(0.9, BaseChance(tier) × InstabilityMultiplier(I))
 P(loud | complain) = I
 ```
 
+Both formulas above are core — universal Mood-driven customer behavior,
+no `ComplaintRecord`/DLC module involved.
+
+**Everything below is owned by `ComplaintsBookModule` (DLC, entity doc
+§11 — moved out of core in the coherence-check pass).** Inactive by
+default (`EventModuleIds: []`, presets doc); with it off, complaining/
+loud-complaining above still happens exactly as specified, but nothing
+below fires and Inspection has no complaint-driven skew.
+
 **`ComplaintRecord.Severity`:**
 ```
 Severity = CategoryBaseWeight × (1 - Mood/100) × (0.5 + 0.5·I)

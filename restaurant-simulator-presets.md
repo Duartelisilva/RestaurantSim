@@ -30,7 +30,7 @@ Status: 🔒 Locked
 | `ProbabilityCheckpointIntervalSeconds` | `3` | **Added — coherence-check pass.** Matches mechanics doc §7's locked default |
 | `PathReplanMaxWaitSeconds` | `5` | **Added — coherence-check pass.** Matches mechanics doc §9's locked default |
 | `MaxCallAttempts` | `3` | **Added — coherence-check pass.** Matches entity doc §10's locked default |
-| `EventModuleIds` | `[]` | No DLC modules active by default. Populate as modules are actually built (Phase 8 of the build order) |
+| `EventModuleIds` | `[]` | No DLC modules active by default. Populate as modules are actually built (Phase 8 of the build order) — e.g. `ComplaintsBookModule` (entity doc §11), left off since it's a Portugal-specific mechanic, not universal |
 | `TableLayoutId` | `"default_diner_layout"` | See below |
 | `StaffRosterSeed` | see below | |
 | `MenuItemIds` | all 16 items below | |

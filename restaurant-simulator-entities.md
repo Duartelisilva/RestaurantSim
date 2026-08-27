@@ -19,7 +19,7 @@ Status legend: 🔒 Locked · 🚧 In progress · ⏳ Not yet discussed
 8. 🔒 CustomerGroup
 9. 🔒 Customer
 10. 🔒 CustomerCall
-11. 🔒 ComplaintRecord
+11. 🔒 ComplaintRecord (DLC-owned — `ComplaintsBookModule`, moved from core in coherence-check pass)
 12. 🔒 Order
 13. 🔒 OrderItem
 14. 🔒 KitchenTicket
@@ -395,12 +395,27 @@ needs to scan for their assigned calls efficiently across the whole floor.
 
 ---
 
-## 11. ComplaintRecord
+## 11. ComplaintRecord (DLC-owned — `ComplaintsBookModule`)
 
-**Fulfills:** doc §5's complaints-book mechanic (*"an unsatisfied customer...
-has a chance to file a formal complaint, which raises Inspection trigger
-probability for a period afterward"*) — with weighting, since a late-food
-complaint and a wrong-order-plus-rudeness complaint shouldn't count equally.
+**Moved out of core — coherence-check pass.** This entire entity models
+Portugal's "Livro de reclamações" (a legally mandated complaints book real
+Portuguese establishments must provide) — a real but culturally-specific
+mechanic, not a universal restaurant behavior. The general customer
+behavior it used to be bundled with — a Mood-driven customer complaining
+or sending food back — is genuinely universal and stays core (mechanics
+doc §3's `P(complain)`/`P(loud|complain)` formulas need no `ComplaintRecord`
+at all). What's DLC-specific is the *formal filing* on top of that: a
+persisted record that specifically feeds Inspection's trigger probability.
+
+Owned entirely by `ComplaintsBookModule : ISimulationModule` (same shape
+as `FoodCriticModule`/`CelebrityModule`, entity doc's Extension Pattern
+section below) — only instantiated if that module is listed in
+`RestaurantConfig.EventModuleIds` (§22). With the module inactive
+(MVP default — presets doc's `EventModuleIds: []`), customers still
+complain/send food back per the core Mood formulas, but no formal filing
+ever happens and Inspection triggers purely randomly with no complaint-
+driven skew, exactly matching Inspection's own "not reputation-scaled"
+baseline description (business logic §5).
 
 | Field | Type | Notes |
 |---|---|---|
@@ -415,10 +430,12 @@ rather than a flat per-complaint bump, the boost is `Σ(active complaint
 severities)`, with each complaint's contribution decaying over time after
 filing. A spree of minor complaints and one severe complaint can now produce
 meaningfully different Inspection odds, rather than counting identically.
+**Only applies when `ComplaintsBookModule` is active** — Inspection's core
+trigger logic has no dependency on this boost existing.
 
 `Category` base weights live in preset/config data (same data-driven pattern
 as everything else), not hardcoded — tunable per restaurant type without
-touching code.
+touching code, but only meaningful if the module is enabled.
 
 ---
 
@@ -646,7 +663,7 @@ independent-module goals.
 | `StaffRoster` | `StaffRosterState` | `Staff` (same `IReadOnlyList<StaffMember>` as before, just relocated for cohesion) |
 | `CustomerService` | `CustomerServiceState` | `Queue`, `ActiveGroups`, `PendingCalls`, `Reservations` |
 | `KitchenOps` | `KitchenOpsState` | `ActiveOrders`, `ActiveTickets` |
-| `Events` | `EventState` | `ActiveEvents`, `ComplaintLog` |
+| `Events` | `EventState` | `ActiveEvents`, `ComplaintLog` — `ComplaintLog` stays empty unless `ComplaintsBookModule` is active (entity doc §11, moved from core in coherence-check pass) |
 | `AutoManagerToggles` | `Dictionary<AutoManagerSystem, bool>` | **Added in concurrency-sweep session.** Per-system on/off state (seating, waiter-actions/jokes, Busser task-priority, etc.) — session-mutable, defaults all-on, persists across the session (not a `RestaurantConfig` preset value, since the player can flip it live). MES is deliberately **not** a toggleable entry — always automated regardless of this state; the player's only lever over MES is the per-ticket priority bump (mechanics doc §10). `AutoManagerSystem (enum: Seating, WaiterActions, TaskPriority)` — one member per toggleable strategy interface in architecture doc §5 (`ISeatingStrategy`, `IWaiterActionStrategy`, `IStaffTaskPriorityStrategy`); `IKitchenSyncStrategy`/MES excluded, per the rule stated in this same row |
 
 **Sub-state groups are not new entities** — each is a thin wrapper bundling
@@ -790,6 +807,19 @@ module is fully self-contained:
   spawn chance and (future) a Mood/Patience boost for groups arriving while
   one is present, both owned by this module alone.
 
+**Not every module shares this exact shape** — `FoodCriticModule`/
+`CelebrityModule` both tag a `CustomerGroup`, but that's specific to
+*customer-shaped* DLC content, not a requirement of `ISimulationModule`
+itself. `ComplaintsBookModule` (entity doc §11 — moved out of core in the
+coherence-check pass) is a different shape entirely: it subscribes to the
+core Mood-driven complaint behavior (mechanics doc §3's `P(complain)`
+roll, which needs no module to function) and, only when this module is
+active, additionally creates a `ComplaintRecord` on high-severity
+complaints and feeds Inspection's trigger-probability boost. No
+`CustomerGroup` tagging involved — proof the module pattern generalizes
+to "react to any domain event, own any additional state" rather than one
+narrow use case.
+
 Adding a fourth special-customer type later (health inspector undercover, food
 blogger, etc.) means writing a new module and registering it — zero edits to
 `CustomerGroup`, `RestaurantEvent`, or any other core file. This is the actual
@@ -846,7 +876,7 @@ JSON file, zero code.
 | `AlmostDirtyThreshold`, `DirtyThreshold` | `float` | Two-tier bathroom cleanliness thresholds (mechanics doc §12) |
 | `TableCleaningBaseSeconds` | `float` | Base Busser table-cleaning duration before speed/fatigue scaling (mechanics doc §13) |
 | `BathroomCleaningBaseSeconds` | `float` | Base Busser bathroom-cleaning duration before speed/fatigue scaling (mechanics doc §13) |
-| `ComplaintCategoryWeights` | `Dictionary<ComplaintCategory, float>` | Base severity weight per `ComplaintRecord.Category` (doc §11) — data-driven, tunable per restaurant type without touching code |
+| `ComplaintCategoryWeights` | `Dictionary<ComplaintCategory, float>` | Base severity weight per `ComplaintRecord.Category` (doc §11) — data-driven, tunable per restaurant type without touching code. Only meaningful if `ComplaintsBookModule` is active (§11) |
 | `InspectionDurationSeconds` | `float` | **Added — coherence-check pass, renamed from an earlier draft.** Authored duration of the Inspection grading/checklist pass, converted to `DurationTicks` on the event's `Data` payload at trigger time via §14. Open, pending playtesting — same treatment as `TableCleaningBaseSeconds`/`BathroomCleaningBaseSeconds`, no separate "max" needed unless a reason for variability is designed later |
 
 ---
@@ -865,7 +895,7 @@ to avoid heap churn on something created every N ticks.
 | `AvgWaitTicks` | `float` | Queue + course-wait average |
 | `TableUtilization` | `float` | % of clusters occupied |
 | `AvgFinalMood` | `float` | Aggregate of `Customer.Mood` at payment across the period — the stats-facing view of an otherwise per-customer, ephemeral value |
-| `ComplaintCount` | `int` | From `ComplaintLog`, period total |
+| `ComplaintCount` | `int` | From `ComplaintLog`, period total — `0` unless `ComplaintsBookModule` is active (entity doc §11) |
 | `ActiveEventTypes` | `IReadOnlyList<string>` | Which `RestaurantEvent`s were active during this window, by `EventType` string key |
 | `TotalGameplayDays` | `int` | **Added — coherence-check pass.** `Restaurant.CurrentDayNumber` (§19) captured at snapshot time — lets a stats view chart by actual day count rather than raw `Tick`, which drifts if `TicksPerRealSecond` ever changes (mechanics doc §14) |
 | `Costs` | `decimal` | **Added in coherence-check pass.** Period total of wages, cleaning fee, restock, maintenance, utilities, breakage/waste — needed for the locked-MVP day-end summary (business logic §4), previously unrepresented on this struct |

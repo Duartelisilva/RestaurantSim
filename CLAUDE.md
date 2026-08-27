@@ -267,9 +267,12 @@ Staff/           — StaffMember, StaffStats
 CustomerService/ — CustomerGroup, Customer, CustomerCall, Reservation
 KitchenOps/      — Order, OrderItem, KitchenTicket, MenuItem
 Events/          — RestaurantEvent, SpecialRole tagging pattern,
-                   ComplaintRecord, DurationBasedResolution,
-                   CustomerGroupBoundResolution (built-in
-                   IEventResolutionStrategy implementations)
+                   ComplaintRecord (DLC-only — populated solely by
+                   ComplaintsBookModule, entity doc §11; the type lives
+                   in Domain because Restaurant.Events.ComplaintLog needs
+                   a typed slot and Domain can't reference Modules),
+                   DurationBasedResolution, CustomerGroupBoundResolution
+                   (built-in IEventResolutionStrategy implementations)
 Statistics/      — StatisticsSnapshot
 Scheduling/      — MealPeriodDefinition (preset data, string-keyed
                    MealPeriodId — same pattern as TableShape/
