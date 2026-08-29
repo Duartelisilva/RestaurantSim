@@ -37,6 +37,15 @@ public sealed class CustomerServiceState
     public List<CustomerGroup> ActiveGroups { get; init; } = new();
     public List<CustomerCall> PendingCalls { get; init; } = new();
     public List<Reservation> Reservations { get; init; } = new();
+
+    // New — not in entity doc §19's listing. Schedules the next Arrival check
+    // (mirrors CustomerGroup.NextAutoVisitTick's existing pattern).
+    public long NextArrivalTick { get; set; }
+
+    // Monotonic, never-reused ID counters — avoids stale-reference bugs from a
+    // reassigned ID once a customer/group leaves.
+    public int NextGroupId { get; set; } = 1;
+    public int NextCustomerId { get; set; } = 1;
 }
 
 public sealed class KitchenOpsState

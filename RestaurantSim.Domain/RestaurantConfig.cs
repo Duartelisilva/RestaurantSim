@@ -64,4 +64,8 @@ public sealed class RestaurantConfig
     public float? BathroomCleaningBaseSeconds { get; init; }
     public Dictionary<ComplaintCategory, float>? ComplaintCategoryWeights { get; init; }
     public float? InspectionDurationSeconds { get; init; }
+
+    // New — not yet in entity doc §22, added to make Arrival implementable.
+    public required int MaxQueueLength { get; init; }
+    public required float BaseArrivalIntervalSeconds { get; init; }
 }

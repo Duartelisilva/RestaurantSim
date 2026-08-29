@@ -1,10 +1,18 @@
+using RestaurantSim.Domain;
 using RestaurantSim.Domain.Abstractions;
-using RestaurantSim.Infrastructure.Persistence;
-using MediatR;
-using FluentValidation;
+using RestaurantSim.Domain.CustomerService;
+
 using RestaurantSim.Application.Commands.SeatGroup;
 using RestaurantSim.Application.Common;
+
+using RestaurantSim.Infrastructure.Persistence;
 using RestaurantSim.Infrastructure.SignalR;
+using RestaurantSim.Infrastructure.Presets;
+using RestaurantSim.Infrastructure.Random;
+
+using MediatR;
+using FluentValidation;
+
 
 
 var builder = WebApplication.CreateBuilder(args);
@@ -19,6 +27,12 @@ builder.Services.AddValidatorsFromAssembly(typeof(SeatGroupCommandValidator).Ass
 builder.Services.AddTransient(typeof(IPipelineBehavior<,>), typeof(RestaurantLockBehavior<,>));
 builder.Services.AddTransient(typeof(IPipelineBehavior<,>), typeof(ValidationBehavior<,>));
 builder.Services.AddSignalR();
+builder.Services.AddSingleton<IRandomProvider, SystemRandomProvider>();
+builder.Services.AddSingleton<ArrivalGroupGenerator>();
+
+builder.Services.AddSingleton<IPresetRepository<RestaurantConfig>>(
+    new InMemoryPresetRepository<RestaurantConfig>(
+        new Dictionary<string, RestaurantConfig> { ["default_diner"] = DefaultDinerConfigSeed.Create() }));
 
 var app = builder.Build();
 
