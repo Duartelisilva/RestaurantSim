@@ -5,7 +5,7 @@ namespace RestaurantSim.Domain.Abstractions;
 // deterministically rather than depending on real System.Random output.
 public interface IRandomProvider
 {
-    // [0, 1)
+    // [0, 1]
     double NextDouble();
 
     int Next(int minInclusive, int maxExclusive);
