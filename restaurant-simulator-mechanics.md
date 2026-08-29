@@ -162,6 +162,10 @@ Reference curve (Normal tendency): Mood 0→0%, 10→~9%, 50→~30%, 90→~46%, 
   §22 — **added, coherence-check pass**, converted to ticks per §14),
   default 3 seconds, as a starting value. Also rolled immediately on any
   discrete Mood-changing event (food arrives, waiter interaction resolves).
+- This section defines *cadence* only (what runs every tick vs. at
+  checkpoints) — the *order* these systems run in within one tick is
+  locked separately in architecture doc §2a (**resolved, backported from
+  implementation-phase decisions**).
 
 ---
 
@@ -721,6 +725,46 @@ shape, `IStaffTaskPriorityStrategy`, applied to Bussers).
 
 ---
 
+## 13a. Staff Fatigue Accrual (added — real gap, not just a backport)
+
+**Previously undefined anywhere.** Business logic §3 states `Fatigue`
+"rises over a shift," and §10/§13 already define how `Fatigue` *degrades*
+Cook/Busser performance once it exists — but no formula ever specified
+how `Fatigue` actually accumulates tick-to-tick. Every other stat at
+least has a first-pass curve; this one didn't. Conceptually decided,
+coefficients intentionally left open rather than guessed:
+
+```
+FatigueDelta_per_tick =
+  0                                          if State == OffShift
+  BaseFatigueAccrualRate                     if State != OffShift, not held past ShiftEnd
+  BaseFatigueAccrualRate × OvertimeFatigueMultiplier
+                                              if held past their own ShiftEnd
+                                              by the coverage rule (entity doc §6/§24a)
+
+Fatigue = clamp(Fatigue + FatigueDelta_per_tick, 0, 1)   // StaffStats range, entity doc §7
+```
+
+- **Overtime, not slower recovery:** confirmed — a staff member held past
+  their own `ShiftEnd` by the §24a coverage rule (no other same-role
+  staff available to relieve them) accrues `Fatigue` **faster**, not
+  slower, matching the real cost of understaffing rather than treating
+  overtime as free.
+- `BaseFatigueAccrualRate` and `OvertimeFatigueMultiplier` are both
+  `RestaurantConfig` fields (entity doc §22) — open, pending playtesting,
+  same treatment as `PatienceDecayBaseline`. Do not guess numbers for
+  either; flag as pending if asked.
+- Resets to `0` on the `Busy`/`Idle → OffShift` transition at `ShiftEnd`
+  (entity doc §6/§24a) — unaffected by this section, already locked.
+
+**Status:** decided/confirmed conceptually during implementation-phase
+discussion; exact coefficients not yet chosen. Belongs to Phase 5 (sim
+loop + tick-driven systems, architecture doc §10) — does not block
+Phase 4's remaining lifecycle stages (Queue, Ordering, Kitchen, Eating,
+Paying, Leaving), none of which depend on Fatigue accruing correctly yet.
+
+---
+
 ## 14. Tick-Rate Configuration 🔒
 
 Resolves the tick-length question left open at §8: `RestaurantConfig`
@@ -850,17 +894,19 @@ SkipEligible = CurrentTick's time-of-day is between two ActiveMealPeriods
 ```
 
 Jumps `SimulationTick` directly to the next period's `StartTime`.
-**Safe for arrivals, unconfirmed for Fatigue — corrected, coherence-check
-pass.** No arrivals spawn during a closed gap (period-gated) — that part
-is safe by construction. But `OffShift` now spans a staff member's full
-daily shift (entity doc §6/§24a's correction) — a staff member rostered
-across the gap (e.g. `["lunch", "dinner"]`, `default_diner`'s own MVP
-default) does **not** go `OffShift` during it, so whether skipping the
-gap's ticks under- or over-counts their `Fatigue` during that stretch
-depends on a per-tick idle-accrual formula that **doesn't exist yet**
-(`Fatigue` is currently only specified as rising "over a shift," not
-per-tick regardless of activity). Not claiming this is safe until that
-formula is designed — flagged rather than asserted.
+**Safe for arrivals; now resolved for Fatigue too — updated, §13a
+backport.** No arrivals spawn during a closed gap (period-gated) — safe
+by construction. `OffShift` spans a staff member's full daily shift
+(entity doc §6/§24a) — a staff member rostered across the gap (e.g.
+`["lunch", "dinner"]`, `default_diner`'s own MVP default) does **not** go
+`OffShift` during it. Now that `Fatigue` accrual has a real formula
+(§13a): `FatigueDelta_per_tick = BaseFatigueAccrualRate` applies purely
+from `State != OffShift`, with no dependency on customer/order activity
+— so skipping the gap's ticks **does genuinely undercount** that staff
+member's `Fatigue` for the skipped stretch, a real (if likely small)
+side-effect of this convenience command, not an unknown anymore. Left as
+an accepted simplification for MVP rather than a blocker — revisit if
+playtesting shows it matters.
 
 ### Season (proposed, not locked — deferred to the actual seasonality DLC)
 

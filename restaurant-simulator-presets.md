@@ -24,6 +24,8 @@ Status: 🔒 Locked
 | `ReputationStart` | `20` | New/unestablished restaurant — not bad, just not built up yet |
 | `ActiveMealPeriods` | `"lunch" (12:00–15:00), "dinner" (19:00–00:00)` | **Added — coherence-check pass.** Typical sit-down restaurant hours, matching the "normal restaurant" default — `"breakfast"`/`"afternoon"` are valid `MealPeriodId` values (entity doc §24a) but unused by this preset. No arrivals spawn, no staff clocked in, outside these windows |
 | `PatienceDecayBaseline` | *open* | Deliberately left untuned — needs real playtesting once Mood/Patience logic exists. Do not guess a number to fill this in; flag it as pending if asked |
+| `BaseFatigueAccrualRate` | *open* | **Added — backported from implementation-phase decisions.** Per-tick Fatigue accrual while on-shift (mechanics doc §13a). Pending playtesting |
+| `OvertimeFatigueMultiplier` | *open* | **Added — backported from implementation-phase decisions.** Multiplier on the base rate while held past `ShiftEnd` by the coverage rule (entity doc §6/§24a, mechanics doc §13a). Pending playtesting |
 | `QueueWaitMoodDecayRate` | `-0.4` | **Added — coherence-check pass.** Matches mechanics doc §2's locked default |
 | `CourseWaitMoodDecayRate` | `-0.3` | **Added — coherence-check pass.** Matches mechanics doc §2's locked default |
 | `NaturalMoodRecoveryRate` | `0.5` | **Added — coherence-check pass.** Matches mechanics doc §2's locked default |
@@ -205,6 +207,9 @@ left open pending real playtesting rather than guessed:
 
 - `PatienceDecayBaseline` (Phase 4 of the build order) — now wired into the
   Mood decay formula (mechanics doc §2); defaults to `1.0` if left unset
+- `BaseFatigueAccrualRate`, `OvertimeFatigueMultiplier` (Phase 5 of the
+  build order) — staff Fatigue accrual, previously had no formula at all
+  (mechanics doc §13a)
 - `ShortDelayThresholdSeconds`, `MaxAcceptableWaitSeconds` —
   heat-lamp-vs-reinform decision (mechanics doc §10)
 - `BaseHighQualityChance`, `BaseEventChance` — food quality rolls

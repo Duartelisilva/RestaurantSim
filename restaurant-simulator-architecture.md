@@ -71,11 +71,9 @@ Fixed-tick model via a .NET `BackgroundService`:
   touching game logic or preset content.
 - Each tick dispatches whatever tick-based logic needs to run that cycle
   (kitchen progress, discrete Mood events, Mood decay/recovery, complaint
-  checkpoints, inter-group spread, movement/arrival resolution). Mechanics
-  doc §7 defines *cadence* (what runs every tick vs. at checkpoints) but
-  does **not** yet lock a specific intra-tick execution order across these
-  systems — that ordering is still open and should be settled before
-  Phase 5 of the build order (§10) is implemented.
+  checkpoints, inter-group spread, movement/arrival resolution) in the
+  locked order specified in §2a below — **resolved, backported from
+  implementation-phase decisions.**
 - **AutoManager does not run inside the tick.** Once a tick finishes and
   releases the per-restaurant lock (§11), AutoManager runs as its own
   sequential pass immediately after — see §11 for the full concurrency
@@ -88,6 +86,42 @@ Fixed-tick model via a .NET `BackgroundService`:
   ticks execute per **real-world second** (drives engine/animation speed).
   Neither implies the other — a restaurant can simulate "fast" in-game
   time at a "slow" real-world tick rate or vice versa.
+
+---
+
+## 2a. Intra-Tick Execution Order 🔒 (added — backported from implementation-phase decisions)
+
+Resolves §2's previously-open gap: mechanics doc §7 defines *cadence*
+(what runs every tick vs. at throttled checkpoints) but never locked the
+*order* systems run in within a single tick. Fixed order, five steps:
+
+1. **Resolve scheduled completions for this tick** — kitchen
+   `Cooking → Ready`, movement arrivals, bathroom visit conclusions,
+   `CustomerCall` stall re-escalation, Arrival's `NextArrivalTick` check,
+   path-replan-on-stall.
+2. **Continuous per-tick accumulation** — Mood decay/recovery, staff
+   Fatigue accrual (§13a of the mechanics doc), Busser cleaning progress.
+   Reads state already updated in step 1.
+3. **Intra-group Mood spread** — reads this tick's already-decayed Mood
+   from step 2, not a stale pre-event snapshot.
+4. **Deterministic threshold checks + probability checkpoints** — Queue
+   abandonment (deterministic, every tick, not throttled) alongside
+   complaint/filing/bathroom-visit rolls (throttled to
+   `ProbabilityCheckpointIntervalSeconds` per mechanics doc §7). Inter-group
+   spread fires inline here as an immediate reaction to a walkout/loud-
+   complaint/filing that occurs in this same step, not as a separate step.
+5. **Day/meal-period boundary check** — last, since `DayEndEligible`
+   (mechanics doc §15) depends on queue/active-group counts step 4 could
+   have just changed this same tick.
+
+**Rationale:** resolve "what changed this tick" before applying "ongoing
+background drift," so decay/spread read already-updated phase/presence
+rather than a stale pre-event snapshot — e.g. a customer whose food
+arrives this tick shouldn't take a "course wait" decay hit the same tick
+it arrived.
+
+AutoManager is unaffected by this ordering — it still runs as its own
+pass after the tick releases the lock (§11), outside all five steps above.
 - **Cross-restaurant scheduling:** multiple `Restaurant` instances (§19 of
   the entity doc's multi-tenant model) tick fully independently of each
   other — each restaurant's own per-restaurant lock (§11) naturally

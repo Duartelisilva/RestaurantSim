@@ -201,7 +201,7 @@ can cover Host seating tasks when Host is busy), fatigue/error mechanics.
 | `StaffId` | `int` | Small fixed MVP roster, array-indexable |
 | `Name` | `string` | Display |
 | `Role` | `StaffRole (enum: Waiter, Host, Cook, HeadChef, Busser)` | Drives behavior via `IStaffBehavior[Role]` dispatch, not inheritance |
-| `State` | `enum: Idle, Busy, Resting, OffShift` | `Resting` reserved for the future stamina/break DLC; unused in MVP. `OffShift` — **added, coherence-check pass** — a staff member outside their full daily shift span (earliest-to-latest across all their `AssignedMealPeriods` for the day, not each period individually); see §24a for the exact `ShiftStart`/`ShiftEnd` definition and the Fatigue tie-in this resolves |
+| `State` | `enum: Idle, Busy, Resting, OffShift` | `Resting` reserved for the future stamina/break DLC; unused in MVP. `OffShift` — **added, coherence-check pass** — a staff member outside their full daily shift span (earliest-to-latest across all their `AssignedMealPeriods` for the day, not each period individually). **Revised, backported from implementation-phase decisions:** clocking out at `ShiftEnd` is coverage-gated, not unconditional — see §24a for the exact `ShiftStart`/`ShiftEnd`/coverage rule and the Fatigue tie-in this resolves |
 | `CurrentTaskType` | `TaskType (enum: SeatGroup, CleanTable, CleanBathroom, DeliverOrderItem, AcknowledgeCall, CookItem)?` | What this staff member is currently doing; `null` when `State == Idle`. See "No dedicated `Task` entity" below for why this is two inlined fields rather than a `TaskId` reference |
 | `CurrentTaskTargetId` | `int?` | The target this task acts on, interpreted per `CurrentTaskType` — a `TableId` for `CleanTable`, `BathroomId` for `CleanBathroom`, `OrderItemId` for `DeliverOrderItem`/`CookItem`, `CallId` for `AcknowledgeCall`, `GroupId` for `SeatGroup`. Always set together with `CurrentTaskType` (both null or both populated) |
 | `Stats` | `StaffStats` | See below |
@@ -851,6 +851,8 @@ JSON file, zero code.
 | `MenuItemIds` | `IReadOnlyList<int>` | Which `MenuItem` presets this restaurant offers — lets multiple restaurants share one global menu catalog while each exposing a different subset |
 | `ReputationStart` | `float` | |
 | `PatienceDecayBaseline` | `float` | Base tuning knob feeding per-customer `PatienceLevel` effects (doc §1.1) |
+| `BaseFatigueAccrualRate` | `float` | **Added — backported from implementation-phase decisions.** Per-tick `Fatigue` accrual while a staff member is not `OffShift` (mechanics doc §13a). Open, pending playtesting |
+| `OvertimeFatigueMultiplier` | `float` | **Added — backported from implementation-phase decisions.** Multiplier on `BaseFatigueAccrualRate` while a staff member is held past their own `ShiftEnd` by the coverage rule (entity doc §6/§24a, mechanics doc §13a) — Fatigue rises faster under forced overtime, not slower. Open, pending playtesting |
 | `QueueWaitMoodDecayRate` | `float` | **Added — coherence-check pass.** Base per-tick Mood decay while queued, default `-0.4` (mechanics doc §2) |
 | `CourseWaitMoodDecayRate` | `float` | **Added — coherence-check pass.** Base per-tick Mood decay while waiting on a course, default `-0.3` (mechanics doc §2) |
 | `NaturalMoodRecoveryRate` | `float` | **Added — coherence-check pass.** Base per-tick Mood recovery while seated/eating, default `+0.5` (mechanics doc §2) |
@@ -976,6 +978,7 @@ pattern exactly.
 |---|---|---|
 | `MealPeriodId` | `string` | Preset key (e.g. `"breakfast"`, `"lunch"`, `"afternoon"`, `"dinner"`) — same pattern as `TableShape.ShapeId`/`KitchenStationType.StationTypeId`. A DLC meal period (e.g. `"happy_hour"`, `"private_event"`) is a new preset entry only — no enum member, no new class, no recompiled assembly. Genuinely data-only: a DLC pack containing just new `MealPeriodDefinition`/`MenuItem`/roster-assignment JSON works without shipping any compiled code at all, since nothing branches on *which* period this is anywhere in the model — only on its time window and which items/staff reference its `MealPeriodId` |
 | `StartTime`, `EndTime` | `TimeOfDay (int Hour, int Minute)` | Time-of-day window, e.g. Lunch 12:00–15:00. Derived against `Restaurant.SimulationTick` via `MinutesPerTick` (entity doc §22) — `TicksPerDay = round(1440 / MinutesPerTick)`, `TimeOfDayTicks = SimulationTick % TicksPerDay` |
+| `ArrivalCutoffTime` | `TimeOfDay?` | **Added — backported from implementation-phase decisions.** Nullable, defaults to `EndTime` if unset. Player-facing: lets a restaurant stop seating new walk-ins before the period's actual close (e.g. dinner runs to 00:00, but arrivals cut off at 21:30 so the kitchen can wind down). Only gates new arrivals — a group already queued or seated before the cutoff is unaffected |
 
 `RestaurantConfig.ActiveMealPeriods: IReadOnlyList<MealPeriodDefinition>`
 (entity doc §22, new field) — which periods a given restaurant actually
@@ -1008,7 +1011,31 @@ among that staff member's `AssignedMealPeriods` active today, `ShiftEnd`
 opening through Lunch's close — the gap between the two periods is *not*
 a clock-out point, matching how a real employee works through a slow
 mid-morning lull without going home and coming back. `OffShift` only
-applies before `ShiftStart` or after `ShiftEnd`. **This is what "shift"
+applies before `ShiftStart`, and — **revised, backported from
+implementation-phase decisions** — is **coverage-gated at `ShiftEnd`**,
+not an unconditional clock-out:
+
+```
+A staff member may go OffShift at ShiftEnd only if, for their own Role,
+EITHER there's no active demand for that role, OR at least one other
+non-OffShift staff member of that same role remains to cover it:
+
+  Waiter/Host: demand = ActiveGroups.Count > 0 || Queue.Count > 0
+  Cook/HeadChef: demand = any OrderItem still Queued/Cooking
+  Busser: demand = any Table/Bathroom needing cleaning
+```
+
+This is a **coverage check, not a "wait for every customer to leave"
+gate** — an earlier draft of this rule required staying until literally
+everyone was gone, which was too broad; it correctly lets breakfast staff
+clock out on schedule once lunch staff have arrived and are available,
+even with breakfast customers still finishing up, as long as their role
+stays covered. Mirrors the same `ActiveGroups.Count == 0 && Queue.Count
+== 0` shape `DayEndEligible` already uses (mechanics doc §15) — reuse of
+an existing pattern, not a new one. A staff member blocked from clocking
+out by this rule keeps accruing `Fatigue` at the **overtime rate**
+(mechanics doc §13a) rather than the baseline rate, until coverage frees
+up or their task genuinely finishes. **This is what "shift"
 now concretely means**: `Fatigue` rises only while a staff member is not
 `OffShift`, and resets fully on the `Busy`/`Idle → OffShift` transition
 at `ShiftEnd` — once per day, not once per assigned period — closing the
