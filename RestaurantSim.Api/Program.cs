@@ -1,9 +1,13 @@
+using RestaurantSim.Domain.Abstractions;
+using RestaurantSim.Infrastructure.Persistence;
+
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
 // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
+builder.Services.AddSingleton<IRestaurantRepository, InMemoryRestaurantRepository>();   // <-- add this line
 
 var app = builder.Build();
 
