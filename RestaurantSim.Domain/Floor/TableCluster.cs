@@ -1,3 +1,6 @@
+using RestaurantSim.Domain.CustomerService;
+using System.Linq;
+
 namespace RestaurantSim.Domain.Floor;
 
 public enum TableClusterState
@@ -28,7 +31,25 @@ public sealed class TableCluster
 
     public bool IsMerged => TableIds.Count > 1;
 
-    // Phase 1: stub only. Real derivation (NeedsCleaning/Occupied/Reserved/Free
-    // priority order per entity doc §5) is business logic, added in a later phase.
-    public TableClusterState State { get; set; } = TableClusterState.Free;
+    // Derived per entity doc §5's priority order: NeedsCleaning > Occupied > Reserved > Free.
+    public TableClusterState DeriveState(
+        IReadOnlyList<Table> allTables,
+        IReadOnlyList<Reservation> reservations,
+        long currentTick)
+    {
+        var memberTables = allTables.Where(t => TableIds.Contains(t.TableId));
+        if (memberTables.Any(t => !t.IsClean))
+            return TableClusterState.NeedsCleaning;
+
+        if (OccupiedBy is not null)
+            return TableClusterState.Occupied;
+
+        var isReserved = reservations.Any(r =>
+            r.AssignedClusterId == ClusterId &&
+            r.Status == ReservationStatus.Booked &&
+            currentTick >= r.ScheduledTime &&
+            currentTick <= r.ScheduledTime + r.GraceWindowTicks);
+
+        return isReserved ? TableClusterState.Reserved : TableClusterState.Free;
+    }
 }

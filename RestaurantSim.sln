@@ -17,6 +17,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RestaurantSim.Domain.Tests"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RestaurantSim.Infrastructure.Tests", "RestaurantSim.Infrastructure.Tests\RestaurantSim.Infrastructure.Tests.csproj", "{5C89A89F-42E9-46AF-AA64-4BA8FC58D0EC}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RestaurantSim.Application.Tests", "RestaurantSim.Application.Tests\RestaurantSim.Application.Tests.csproj", "{AF6F9B9F-FD67-4D46-9075-1B92E4AC29A2}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -54,5 +56,9 @@ Global
 		{5C89A89F-42E9-46AF-AA64-4BA8FC58D0EC}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{5C89A89F-42E9-46AF-AA64-4BA8FC58D0EC}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{5C89A89F-42E9-46AF-AA64-4BA8FC58D0EC}.Release|Any CPU.Build.0 = Release|Any CPU
+		{AF6F9B9F-FD67-4D46-9075-1B92E4AC29A2}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{AF6F9B9F-FD67-4D46-9075-1B92E4AC29A2}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{AF6F9B9F-FD67-4D46-9075-1B92E4AC29A2}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{AF6F9B9F-FD67-4D46-9075-1B92E4AC29A2}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 EndGlobal

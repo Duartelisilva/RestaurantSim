@@ -1,5 +1,11 @@
 using RestaurantSim.Domain.Abstractions;
 using RestaurantSim.Infrastructure.Persistence;
+using MediatR;
+using FluentValidation;
+using RestaurantSim.Application.Commands.SeatGroup;
+using RestaurantSim.Application.Common;
+using RestaurantSim.Infrastructure.SignalR;
+
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -7,9 +13,16 @@ var builder = WebApplication.CreateBuilder(args);
 // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
-builder.Services.AddSingleton<IRestaurantRepository, InMemoryRestaurantRepository>();   // <-- add this line
+builder.Services.AddSingleton<IRestaurantRepository, InMemoryRestaurantRepository>();
+builder.Services.AddMediatR(cfg => cfg.RegisterServicesFromAssembly(typeof(SeatGroupCommand).Assembly));
+builder.Services.AddValidatorsFromAssembly(typeof(SeatGroupCommandValidator).Assembly);
+builder.Services.AddTransient(typeof(IPipelineBehavior<,>), typeof(RestaurantLockBehavior<,>));
+builder.Services.AddTransient(typeof(IPipelineBehavior<,>), typeof(ValidationBehavior<,>));
+builder.Services.AddSignalR();
 
 var app = builder.Build();
+
+app.MapHub<RestaurantHub>("/hubs/restaurant");
 
 // Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
