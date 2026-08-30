@@ -68,4 +68,10 @@ public sealed class RestaurantConfig
     // New — not yet in entity doc §22, added to make Arrival implementable.
     public required int MaxQueueLength { get; init; }
     public required float BaseArrivalIntervalSeconds { get; init; }
+
+    // New — not in entity doc §22. Business logic §1.2 references this threshold
+    // qualitatively but never named it as a field. Nullable with a code-level
+    // default fallback (15f, tied to the Mood tier table) if unset — same
+    // convention as PatienceDecayBaseline.
+    public float? QueueAbandonmentMoodThreshold { get; init; }
 }
