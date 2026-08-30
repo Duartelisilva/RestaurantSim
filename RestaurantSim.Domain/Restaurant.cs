@@ -52,6 +52,10 @@ public sealed class KitchenOpsState
 {
     public List<Order> ActiveOrders { get; init; } = new();
     public List<KitchenTicket> ActiveTickets { get; init; } = new();
+
+    // Monotonic, never-reused counters — same pattern as CustomerServiceState's.
+    public int NextOrderId { get; set; } = 1;
+    public int NextOrderItemId { get; set; } = 1;
 }
 
 public sealed class EventState

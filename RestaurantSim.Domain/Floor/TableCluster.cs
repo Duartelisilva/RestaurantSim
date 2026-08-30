@@ -1,5 +1,4 @@
 using RestaurantSim.Domain.CustomerService;
-using System.Linq;
 
 namespace RestaurantSim.Domain.Floor;
 
@@ -51,5 +50,20 @@ public sealed class TableCluster
             currentTick <= r.ScheduledTime + r.GraceWindowTicks);
 
         return isReserved ? TableClusterState.Reserved : TableClusterState.Free;
+    }
+
+    // Single source of truth for "can this group be seated here" — called by
+    // BOTH SeatGroupCommandValidator and SeatGroupCommandHandler. Previously
+    // each independently computed "DeriveState(...) == Free && Capacity >=
+    // partySize" inline, which is the same duplicated-logic risk PlaceOrder's
+    // refactor addressed — fixed here for consistency across the codebase.
+    public bool CanSeat(
+        int partySize,
+        IReadOnlyList<Table> allTables,
+        IReadOnlyList<Reservation> reservations,
+        long currentTick)
+    {
+        return DeriveState(allTables, reservations, currentTick) == TableClusterState.Free
+            && Capacity >= partySize;
     }
 }

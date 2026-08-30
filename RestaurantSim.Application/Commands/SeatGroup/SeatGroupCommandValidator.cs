@@ -1,6 +1,5 @@
 using FluentValidation;
 using RestaurantSim.Domain.Abstractions;
-using RestaurantSim.Domain.Floor;
 
 namespace RestaurantSim.Application.Commands.SeatGroup;
 
@@ -43,7 +42,7 @@ public sealed class SeatGroupCommandValidator : AbstractValidator<SeatGroupComma
         var cluster = restaurant.Floor.Clusters.FirstOrDefault(c => c.ClusterId == command.ClusterId);
         if (group is null || cluster is null) return false;
 
-        var state = cluster.DeriveState(restaurant.Floor.Tables, restaurant.CustomerService.Reservations, restaurant.SimulationTick);
-        return state == TableClusterState.Free && cluster.Capacity >= group.PartySize;
+        // Same method the handler calls before committing — single source of truth.
+        return cluster.CanSeat(group.PartySize, restaurant.Floor.Tables, restaurant.CustomerService.Reservations, restaurant.SimulationTick);
     }
 }

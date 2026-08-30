@@ -26,7 +26,7 @@ public static class DefaultDinerConfigSeed
             (StaffRole.Cook, 2),
             (StaffRole.Busser, 1)
         },
-        MenuItemIds = Array.Empty<int>(), // populated when Ordering phase builds MenuItem presets
+        MenuItemIds = Enumerable.Range(1, 16).ToArray(),
         ReputationStart = 20f,
         PatienceDecayBaseline = null, // open, pending playtesting (presets doc)
         QueueWaitMoodDecayRate = -0.4f,

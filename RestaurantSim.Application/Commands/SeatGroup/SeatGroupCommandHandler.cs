@@ -3,7 +3,6 @@ using RestaurantSim.Application.Common;
 using RestaurantSim.Domain.Abstractions;
 using RestaurantSim.Domain.CustomerService;
 using RestaurantSim.Domain.DomainEvents;
-using RestaurantSim.Domain.Floor;
 
 namespace RestaurantSim.Application.Commands.SeatGroup;
 
@@ -32,12 +31,11 @@ public sealed class SeatGroupCommandHandler : IRequestHandler<SeatGroupCommand, 
         if (cluster is null)
             return Result.Failure($"Cluster {request.ClusterId} does not exist.");
 
-        var clusterState = cluster.DeriveState(restaurant.Floor.Tables, restaurant.CustomerService.Reservations, restaurant.SimulationTick);
-        if (clusterState != TableClusterState.Free || cluster.Capacity < group.PartySize)
+        // Same method the validator calls — single source of truth, no
+        // duplicated logic between the two layers.
+        if (!cluster.CanSeat(group.PartySize, restaurant.Floor.Tables, restaurant.CustomerService.Reservations, restaurant.SimulationTick))
             return Result.Failure($"Cluster {request.ClusterId} is not available or does not fit the group.");
 
-        // Commit — the validator already re-confirmed this at handle-time, but the
-        // actual mutation only ever happens here, inside the lock.
         restaurant.CustomerService.Queue.Remove(group);
         restaurant.CustomerService.ActiveGroups.Add(group);
 

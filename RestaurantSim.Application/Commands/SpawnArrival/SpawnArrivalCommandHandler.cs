@@ -40,7 +40,10 @@ public sealed class SpawnArrivalCommandHandler : IRequestHandler<SpawnArrivalCom
         if (restaurant.SimulationTick < restaurant.CustomerService.NextArrivalTick)
             return Result.Success();
 
-        var activePeriod = FindActiveMealPeriod(config, restaurant.SimulationTick);
+        // Now uses the shared MealPeriodCalculator instead of a private copy —
+        // Ordering needs the same lookup, so this was extracted to avoid a
+        // second duplicate implementation drifting out of sync.
+        var activePeriod = MealPeriodCalculator.FindActive(config.ActiveMealPeriods, config.MinutesPerTick, restaurant.SimulationTick);
         if (activePeriod is null)
         {
             restaurant.CustomerService.NextArrivalTick = restaurant.SimulationTick + 1;
@@ -59,10 +62,6 @@ public sealed class SpawnArrivalCommandHandler : IRequestHandler<SpawnArrivalCom
             return Result.Success();
         }
 
-        // Monotonic, never-reused counters (Restaurant-scoped) — replaces the
-        // earlier placeholder ID scheme, which could collide once a session ran
-        // long enough. Reusing an ID after a customer/group leaves risks a stale
-        // reference elsewhere pointing at a now-different entity.
         var groupId = restaurant.CustomerService.NextGroupId++;
         var group = _groupGenerator.Generate(
             groupId,
@@ -78,20 +77,6 @@ public sealed class SpawnArrivalCommandHandler : IRequestHandler<SpawnArrivalCom
         await _publisher.Publish(new GroupArrived(restaurant.RestaurantId, group.GroupId, restaurant.SimulationTick), cancellationToken);
 
         return Result.Success();
-    }
-
-    private static MealPeriodDefinition? FindActiveMealPeriod(RestaurantConfig config, long currentTick)
-    {
-        var minutesIntoDay = MinutesIntoDay(config, currentTick);
-
-        foreach (var period in config.ActiveMealPeriods)
-        {
-            var (startMinutes, endMinutes) = PeriodWindow(period);
-            if (minutesIntoDay >= startMinutes && minutesIntoDay < endMinutes)
-                return period;
-        }
-
-        return null;
     }
 
     private static int ComputeIntervalTicks(RestaurantConfig config, Restaurant restaurant, MealPeriodDefinition period)
@@ -111,29 +96,12 @@ public sealed class SpawnArrivalCommandHandler : IRequestHandler<SpawnArrivalCom
 
     private static double ComputeTimeOfDayModifier(RestaurantConfig config, long currentTick, MealPeriodDefinition period)
     {
-        var minutesIntoDay = MinutesIntoDay(config, currentTick);
-        var (startMinutes, endMinutes) = PeriodWindow(period);
+        var minutesIntoDay = MealPeriodCalculator.MinutesIntoDay(config.MinutesPerTick, currentTick);
+        var (startMinutes, endMinutes) = MealPeriodCalculator.PeriodWindow(period);
         var periodDuration = endMinutes - startMinutes;
         if (periodDuration <= 0) return 1.0;
 
         var fraction = Math.Clamp((minutesIntoDay - startMinutes) / (double)periodDuration, 0, 1);
         return 0.7 + 0.8 * Math.Sin(Math.PI * fraction);
-    }
-
-    private static double MinutesIntoDay(RestaurantConfig config, long currentTick)
-    {
-        var ticksPerDay = (long)Math.Round(1440.0 / config.MinutesPerTick);
-        var timeOfDayTicks = currentTick % ticksPerDay;
-        return timeOfDayTicks * config.MinutesPerTick;
-    }
-
-    private static (int StartMinutes, int EndMinutes) PeriodWindow(MealPeriodDefinition period)
-    {
-        var startMinutes = period.StartTime.Hour * 60 + period.StartTime.Minute;
-        var endMinutes = period.EndTime is { Hour: 0, Minute: 0 }
-            ? 1440
-            : period.EndTime.Hour * 60 + period.EndTime.Minute;
-
-        return (startMinutes, endMinutes);
     }
 }

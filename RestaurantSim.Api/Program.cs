@@ -1,6 +1,7 @@
 using RestaurantSim.Domain;
 using RestaurantSim.Domain.Abstractions;
 using RestaurantSim.Domain.CustomerService;
+using RestaurantSim.Domain.KitchenOps;
 
 using RestaurantSim.Application.Commands.SeatGroup;
 using RestaurantSim.Application.Common;
@@ -33,6 +34,9 @@ builder.Services.AddSingleton<ArrivalGroupGenerator>();
 builder.Services.AddSingleton<IPresetRepository<RestaurantConfig>>(
     new InMemoryPresetRepository<RestaurantConfig>(
         new Dictionary<string, RestaurantConfig> { ["default_diner"] = DefaultDinerConfigSeed.Create() }));
+
+builder.Services.AddSingleton<IMenuRepository>(
+    new InMemoryMenuRepository(DefaultDinerMenuSeed.Create()));
 
 var app = builder.Build();
 
