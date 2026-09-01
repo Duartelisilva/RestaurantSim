@@ -19,23 +19,15 @@ public sealed class OrderItem
     public OrderItemStatus Status { get; set; } = OrderItemStatus.Queued;
     public int? TicketId { get; set; }
     public int? StationId { get; set; }
-
-    // New — needed to know when a Cooking item's EffectivePrepTicks have
-    // elapsed (mechanics doc §10). Assigned cook is looked up via
-    // StaffMember.CurrentTaskType/TargetId (entity doc §6's existing pattern).
     public long? CookingStartedAtTick { get; set; }
-
-    // New — course-sync target (mechanics doc §10's StartTick_i), computed at
-    // ticket creation using nominal baseline stats (Speed=0.5, Fatigue=0 —
-    // entity doc §7's stated "average" default) since no cook is assigned yet
-    // at that point. A station+cook-available item still waits until this
-    // tick before starting, so faster items are deliberately held back to
-    // finish alongside slower siblings — the actual locked formula, not just
-    // its heat-lamp fallback.
     public long? PlannedStartTick { get; set; }
-
     public long? HeldSinceTick { get; set; }
     public bool IsHighQuality { get; set; }
+
+    // New — needed to compute QualityAtServe (mechanics doc §10) at delivery
+    // time. Previously rolled in AdvanceKitchenCommandHandler and discarded;
+    // now stored so DeliverOrderItemCommand can actually use it.
+    public bool HadFoodQualityEvent { get; set; }
 }
 
 public sealed class Order
