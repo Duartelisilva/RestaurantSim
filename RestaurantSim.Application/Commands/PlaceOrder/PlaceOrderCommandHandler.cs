@@ -7,11 +7,6 @@ using RestaurantSim.Domain.KitchenOps;
 
 namespace RestaurantSim.Application.Commands.PlaceOrder;
 
-// Now fully re-verifies phase-gating AND item validity before committing, using
-// the exact same shared methods the validator calls (OrderPhaseTransition,
-// PlaceOrderItemValidation) — matches SeatGroupCommandHandler's level of
-// protection, with zero duplicated logic. Resolves the earlier trade-off where
-// this handler trusted the pipeline without re-checking.
 public sealed class PlaceOrderCommandHandler : IRequestHandler<PlaceOrderCommand, Result>
 {
     private readonly IRestaurantRepository _repository;
@@ -58,8 +53,6 @@ public sealed class PlaceOrderCommandHandler : IRequestHandler<PlaceOrderCommand
         if (!await PlaceOrderItemValidation.AllItemsAreValidAsync(restaurant, config, group, request.Phase, request.Items, _menuRepository, cancellationToken))
             return Result.Failure("One or more ordered items are invalid for this group, phase, or the current meal period.");
 
-        // Get-or-create the group's single running Order (entity doc §12 — one
-        // Order per group, accumulating items across all phases, not one per phase).
         Order order;
         if (currentOrder is null)
         {
@@ -79,7 +72,7 @@ public sealed class PlaceOrderCommandHandler : IRequestHandler<PlaceOrderCommand
             order = currentOrder;
         }
 
-        var newItemIds = new List<int>();
+        var newItems = new List<OrderItem>();
 
         foreach (var itemRequest in request.Items)
         {
@@ -93,12 +86,51 @@ public sealed class PlaceOrderCommandHandler : IRequestHandler<PlaceOrderCommand
                 OwnerId = itemRequest.CustomerId,
                 MenuItemId = menuItem.MenuItemId,
                 Phase = request.Phase,
-                PriceAtOrder = menuItem.DefaultPrice, // player-set pricing not wired yet — see pending-doc-changes
+                PriceAtOrder = menuItem.DefaultPrice,
                 Status = OrderItemStatus.Queued
             };
 
             order.Items.Add(orderItem);
-            newItemIds.Add(orderItem.OrderItemId);
+            newItems.Add(orderItem);
+        }
+
+        // Create a KitchenTicket for station-required items only — pickup items
+        // (Drinks) have no station/contention model and are out of Kitchen's
+        // scope (a separate waiter-fetch mechanic, not built yet).
+        var stationItems = new List<(OrderItem Item, RestaurantSim.Domain.KitchenOps.MenuItem MenuItem)>();
+        foreach (var item in newItems)
+        {
+            var menuItem = await _menuRepository.GetByIdAsync(item.MenuItemId, cancellationToken);
+            if (menuItem?.RequiredStationType is not null)
+                stationItems.Add((item, menuItem));
+        }
+
+        if (stationItems.Count > 0)
+        {
+            var ticketId = restaurant.KitchenOps.NextTicketId++;
+
+            var nominalTicks = stationItems.ToDictionary(
+                x => x.Item.OrderItemId,
+                x => KitchenPrepTimeCalculator.NominalEffectivePrepTicks(
+                    x.MenuItem, GetStationSpeedMultiplier(restaurant, x.MenuItem.RequiredStationType!), config.TicksPerRealSecond));
+
+            var targetReadyTick = restaurant.SimulationTick + nominalTicks.Values.Max();
+
+            var ticket = new KitchenTicket
+            {
+                TicketId = ticketId,
+                ClusterId = group.ClusterId.Value,
+                ItemIds = stationItems.Select(x => x.Item.OrderItemId).ToList(),
+                SubmittedAtTick = restaurant.SimulationTick,
+                TargetReadyTick = targetReadyTick
+            };
+            restaurant.KitchenOps.ActiveTickets.Add(ticket);
+
+            foreach (var (item, _) in stationItems)
+            {
+                item.TicketId = ticketId;
+                item.PlannedStartTick = targetReadyTick - nominalTicks[item.OrderItemId];
+            }
         }
 
         group.CoursePhase = request.Phase switch
@@ -112,9 +144,14 @@ public sealed class PlaceOrderCommandHandler : IRequestHandler<PlaceOrderCommand
         await _repository.SaveAsync(restaurant, cancellationToken);
 
         await _publisher.Publish(
-            new OrderPlaced(restaurant.RestaurantId, group.GroupId, order.OrderId, request.Phase, newItemIds, restaurant.SimulationTick),
+            new OrderPlaced(restaurant.RestaurantId, group.GroupId, order.OrderId, request.Phase, newItems.Select(i => i.OrderItemId).ToList(), restaurant.SimulationTick),
             cancellationToken);
 
         return Result.Success();
     }
+
+    // Defensive fallback (1.0 = no scaling) if the station instance doesn't
+    // exist yet — pre-bootstrap safety net, see the kitchen-layout seed's notes.
+    private static float GetStationSpeedMultiplier(Domain.Restaurant restaurant, string stationTypeId) =>
+        restaurant.Floor.KitchenStations.FirstOrDefault(s => s.StationType.StationTypeId == stationTypeId)?.StationType.SpeedMultiplier ?? 1.0f;
 }

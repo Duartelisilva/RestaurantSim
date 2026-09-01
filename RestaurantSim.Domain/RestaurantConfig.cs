@@ -74,4 +74,9 @@ public sealed class RestaurantConfig
     // default fallback (15f, tied to the Mood tier table) if unset — same
     // convention as PatienceDecayBaseline.
     public float? QueueAbandonmentMoodThreshold { get; init; }
+
+    // New — confirmed in chat, not yet in entity doc §22. Small Mood penalty
+    // applied to a group's still-waiting members when their ticket flips to
+    // re-inform/async mode (mechanics doc §10).
+    public float? ReinformMoodPenalty { get; init; }
 }

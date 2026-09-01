@@ -1,7 +1,5 @@
 namespace RestaurantSim.Domain.KitchenOps;
 
-// The sync-batch unit: items submitted together (same phase, same table)
-// that the kitchen schedules to finish together.
 public sealed class KitchenTicket
 {
     public required int TicketId { get; init; }
@@ -9,12 +7,15 @@ public sealed class KitchenTicket
     public required IReadOnlyList<int> ItemIds { get; init; }
     public required long SubmittedAtTick { get; init; }
 
-    // Computed sync target — the scheduling algorithm's output (mechanics doc §10).
+    // Nominal sync target, computed at creation (mechanics doc §10) — see
+    // OrderItem.PlannedStartTick for how per-item targets derive from this.
     public long TargetReadyTick { get; set; }
 
-    // Player-settable priority bump via PrioritizeTicketCommand (mechanics doc §10).
     public bool PlayerPrioritized { get; set; }
 
-    // No stored State field — ticket-level status is derived from its items' statuses
-    // in a later phase, avoiding a second source of truth.
+    // New — not in entity doc §14. Implements "once re-informed, every later
+    // item on this ticket is served immediately on Ready, no further
+    // hold-evaluation per item" (mechanics doc §10). Set true the first time
+    // any item on this ticket triggers re-inform.
+    public bool IsAsyncMode { get; set; }
 }

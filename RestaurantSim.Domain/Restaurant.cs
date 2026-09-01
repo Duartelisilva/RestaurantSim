@@ -56,6 +56,8 @@ public sealed class KitchenOpsState
     // Monotonic, never-reused counters — same pattern as CustomerServiceState's.
     public int NextOrderId { get; set; } = 1;
     public int NextOrderItemId { get; set; } = 1;
+
+    public int NextTicketId { get; set; } = 1;
 }
 
 public sealed class EventState
