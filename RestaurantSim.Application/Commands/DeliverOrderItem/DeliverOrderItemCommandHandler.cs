@@ -40,9 +40,6 @@ public sealed class DeliverOrderItemCommandHandler : IRequestHandler<DeliverOrde
         if (group is null)
             return Result.Failure($"Group {order.GroupId} for order {order.OrderId} is not currently active.");
 
-        // Hold clock stops at pickup for delivery, not at arrival at the table
-        // (mechanics doc §10). HeldTicks is 0 if the item never went under the
-        // lamp (straight Cooking -> Ready), so the formula below applies uniformly.
         long heldTicks = 0;
         if (item.Status == OrderItemStatus.HeldUnderLamp && item.HeldSinceTick is long heldSince)
         {
@@ -59,7 +56,6 @@ public sealed class DeliverOrderItemCommandHandler : IRequestHandler<DeliverOrde
             return await FinalizeDeliveryAsync(restaurant, order, item, group, qualityAtServe, cancellationToken);
         }
 
-        // Never held — quality decay never applied.
         var baseQualityNoHold = item.IsHighQuality ? 100f : (item.HadFoodQualityEvent ? 30f : 80f);
         item.Status = OrderItemStatus.Served;
         return await FinalizeDeliveryAsync(restaurant, order, item, group, baseQualityNoHold, cancellationToken);
@@ -73,7 +69,6 @@ public sealed class DeliverOrderItemCommandHandler : IRequestHandler<DeliverOrde
         float qualityAtServe,
         CancellationToken cancellationToken)
     {
-        // Mood impact at serve (mechanics doc §10).
         var moodBonus = qualityAtServe switch
         {
             >= 90 => 10f,
@@ -81,11 +76,16 @@ public sealed class DeliverOrderItemCommandHandler : IRequestHandler<DeliverOrde
             _ => -8f
         };
 
-        // Applied regardless of IsPresentAtTable — this is a discrete event, not
-        // decay/recovery/spread, which is what mechanics doc §12's Mood-freeze-
-        // while-away rule actually covers. Judgment call, flagged in pending-doc-changes.
+        // Only applied if the customer is actually present — they can't react
+        // to food they haven't seen/tasted (corrected: an earlier version of
+        // this applied the bonus regardless of presence, which was wrong).
+        // The fully correct model would defer this to when the customer
+        // RETURNS to the table (mirroring the bathroom cleanliness return-delta
+        // pattern, mechanics doc §12), but LeaveTableForBathroomCommand/
+        // ReturnToTableCommand don't exist yet — flagged as a known
+        // simplification to revisit once that mechanic is built, not a full fix.
         var owner = group.Members.FirstOrDefault(m => m.CustomerId == item.OwnerId);
-        if (owner is not null)
+        if (owner is not null && owner.IsPresentAtTable)
         {
             owner.Mood = Math.Clamp(owner.Mood + moodBonus, 0, 100);
         }

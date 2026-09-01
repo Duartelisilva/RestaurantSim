@@ -123,6 +123,26 @@ public class DeliverOrderItemCommandHandlerTests
         result.IsFailure.Should().BeTrue();
     }
 
+    [Fact]
+    public async Task Handle_DoesNotApplyMoodBonus_WhenCustomerIsAbsentFromTable()
+    {
+        var (restaurant, item, group) = BuildScenario(OrderItemStatus.Ready, isHighQuality: true, hadFoodQualityEvent: false);
+        group.Members[0].IsPresentAtTable = false; // e.g. in the bathroom
+        var moodBefore = group.Members[0].Mood;
+        _repository.GetAsync(restaurant.RestaurantId, Arg.Any<CancellationToken>()).Returns(restaurant);
+
+        var result = await _handler.Handle(new DeliverOrderItemCommand(restaurant.RestaurantId, item.OrderItemId), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        item.Status.Should().Be(OrderItemStatus.Served); // still delivered
+        group.Members[0].Mood.Should().Be(moodBefore); // but no mood change while absent
+
+        // Event still reports what the bonus WOULD have been, for visibility.
+        await _publisher.Received(1).Publish(
+            Arg.Is<OrderItemServed>(e => e.MoodBonus == 10f),
+            Arg.Any<CancellationToken>());
+    }
+
     private static (Restaurant Restaurant, OrderItem Item, CustomerGroup Group) BuildScenario(
         OrderItemStatus status, bool isHighQuality, bool hadFoodQualityEvent, long? heldSinceTick = null)
     {
