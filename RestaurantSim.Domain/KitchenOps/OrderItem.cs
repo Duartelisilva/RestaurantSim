@@ -23,11 +23,12 @@ public sealed class OrderItem
     public long? PlannedStartTick { get; set; }
     public long? HeldSinceTick { get; set; }
     public bool IsHighQuality { get; set; }
-
-    // New — needed to compute QualityAtServe (mechanics doc §10) at delivery
-    // time. Previously rolled in AdvanceKitchenCommandHandler and discarded;
-    // now stored so DeliverOrderItemCommand can actually use it.
     public bool HadFoodQualityEvent { get; set; }
+
+    // New — needed to gate pickup-item (Drinks) fetch time. Order.CreatedAtTick
+    // reflects only the FIRST item ever added to the order, which is wrong for
+    // a later mid-meal drink refill added to an already-existing order.
+    public required long CreatedAtTick { get; init; }
 }
 
 public sealed class Order

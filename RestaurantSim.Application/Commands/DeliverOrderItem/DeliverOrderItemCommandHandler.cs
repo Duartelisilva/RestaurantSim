@@ -10,11 +10,19 @@ namespace RestaurantSim.Application.Commands.DeliverOrderItem;
 public sealed class DeliverOrderItemCommandHandler : IRequestHandler<DeliverOrderItemCommand, Result>
 {
     private readonly IRestaurantRepository _repository;
+    private readonly IPresetRepository<Domain.RestaurantConfig> _presetRepository;
+    private readonly IMenuRepository _menuRepository;
     private readonly IPublisher _publisher;
 
-    public DeliverOrderItemCommandHandler(IRestaurantRepository repository, IPublisher publisher)
+    public DeliverOrderItemCommandHandler(
+        IRestaurantRepository repository,
+        IPresetRepository<Domain.RestaurantConfig> presetRepository,
+        IMenuRepository menuRepository,
+        IPublisher publisher)
     {
         _repository = repository;
+        _presetRepository = presetRepository;
+        _menuRepository = menuRepository;
         _publisher = publisher;
     }
 
@@ -29,8 +37,29 @@ public sealed class DeliverOrderItemCommandHandler : IRequestHandler<DeliverOrde
         if (order is null || item is null)
             return Result.Failure($"OrderItem {request.OrderItemId} does not exist.");
 
-        if (item.Status is not (OrderItemStatus.Ready or OrderItemStatus.HeldUnderLamp))
+        var menuItem = await _menuRepository.GetByIdAsync(item.MenuItemId, cancellationToken);
+        if (menuItem is null)
+            return Result.Failure($"MenuItem {item.MenuItemId} does not exist.");
+
+        var isPickupItem = menuItem.RequiredStationType is null;
+
+        if (isPickupItem)
+        {
+            if (item.Status != OrderItemStatus.Queued)
+                return Result.Failure($"OrderItem {request.OrderItemId} is not in a deliverable state (current status: {item.Status}).");
+
+            var config = await _presetRepository.GetAsync(restaurant.ConfigId, cancellationToken);
+            if (config is null)
+                return Result.Failure($"RestaurantConfig '{restaurant.ConfigId}' does not exist.");
+
+            var prepTicks = KitchenPrepTimeCalculator.PrepTicks(menuItem.PrepTimeSeconds, config.TicksPerRealSecond);
+            if (restaurant.SimulationTick < item.CreatedAtTick + prepTicks)
+                return Result.Failure($"OrderItem {request.OrderItemId} has not finished its fetch time yet.");
+        }
+        else if (item.Status is not (OrderItemStatus.Ready or OrderItemStatus.HeldUnderLamp))
+        {
             return Result.Failure($"OrderItem {request.OrderItemId} is not ready for delivery (current status: {item.Status}).");
+        }
 
         var waiter = restaurant.StaffRoster.Staff.FirstOrDefault(s => s.Role == StaffRole.Waiter && s.State == StaffState.Idle);
         if (waiter is null)
@@ -39,6 +68,12 @@ public sealed class DeliverOrderItemCommandHandler : IRequestHandler<DeliverOrde
         var group = restaurant.CustomerService.ActiveGroups.FirstOrDefault(g => g.GroupId == order.GroupId);
         if (group is null)
             return Result.Failure($"Group {order.GroupId} for order {order.OrderId} is not currently active.");
+
+        if (isPickupItem)
+        {
+            item.Status = OrderItemStatus.Served;
+            return await FinalizeDeliveryAsync(restaurant, order, item, group, qualityAtServe: 80f, cancellationToken);
+        }
 
         long heldTicks = 0;
         if (item.Status == OrderItemStatus.HeldUnderLamp && item.HeldSinceTick is long heldSince)
@@ -76,14 +111,6 @@ public sealed class DeliverOrderItemCommandHandler : IRequestHandler<DeliverOrde
             _ => -8f
         };
 
-        // Only applied if the customer is actually present — they can't react
-        // to food they haven't seen/tasted (corrected: an earlier version of
-        // this applied the bonus regardless of presence, which was wrong).
-        // The fully correct model would defer this to when the customer
-        // RETURNS to the table (mirroring the bathroom cleanliness return-delta
-        // pattern, mechanics doc §12), but LeaveTableForBathroomCommand/
-        // ReturnToTableCommand don't exist yet — flagged as a known
-        // simplification to revisit once that mechanic is built, not a full fix.
         var owner = group.Members.FirstOrDefault(m => m.CustomerId == item.OwnerId);
         if (owner is not null && owner.IsPresentAtTable)
         {

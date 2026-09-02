@@ -257,7 +257,7 @@ public class PlaceOrderCommandHandlerTests
             StaffRoster = new StaffRosterState(),
             CustomerService = new CustomerServiceState(),
             KitchenOps = new KitchenOpsState(),
-            Events = new EventState()
+            Events = new EventState(),
         };
 
         restaurant.CustomerService.ActiveGroups.Add(group);

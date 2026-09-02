@@ -8,6 +8,7 @@ using RestaurantSim.Domain.CustomerService;
 using RestaurantSim.Domain.DomainEvents;
 using RestaurantSim.Domain.Floor;
 using RestaurantSim.Domain.KitchenOps;
+using RestaurantSim.Domain.Scheduling;
 using RestaurantSim.Domain.Staff;
 using Xunit;
 
@@ -16,12 +17,30 @@ namespace RestaurantSim.Application.Tests.Commands.DeliverOrderItem;
 public class DeliverOrderItemCommandHandlerTests
 {
     private readonly IRestaurantRepository _repository = Substitute.For<IRestaurantRepository>();
+    private readonly IPresetRepository<RestaurantConfig> _presetRepository = Substitute.For<IPresetRepository<RestaurantConfig>>();
+    private readonly IMenuRepository _menuRepository = Substitute.For<IMenuRepository>();
     private readonly IPublisher _publisher = Substitute.For<IPublisher>();
     private readonly DeliverOrderItemCommandHandler _handler;
 
+    private static readonly MenuItem SteakItem = new()
+    {
+        MenuItemId = 5, Name = "Grilled Steak", Category = MenuItemCategory.Adult, Course = ItemPhase.EntryMain,
+        RequiredStationType = "grill", PickupSourceType = null, PrepTimeSeconds = 14, DefaultPrice = 12.50m,
+        AvailableMealPeriods = new[] { "lunch" }
+    };
+
+    private static readonly MenuItem WaterItem = new()
+    {
+        MenuItemId = 1, Name = "Water", Category = MenuItemCategory.Adult, Course = ItemPhase.Drinks,
+        RequiredStationType = null, PickupSourceType = "freezer", PrepTimeSeconds = 2, DefaultPrice = 1.50m,
+        AvailableMealPeriods = new[] { "lunch" }
+    };
+
     public DeliverOrderItemCommandHandlerTests()
     {
-        _handler = new DeliverOrderItemCommandHandler(_repository, _publisher);
+        _handler = new DeliverOrderItemCommandHandler(_repository, _presetRepository, _menuRepository, _publisher);
+        _menuRepository.GetByIdAsync(5, Arg.Any<CancellationToken>()).Returns(SteakItem);
+        _menuRepository.GetByIdAsync(1, Arg.Any<CancellationToken>()).Returns(WaterItem);
     }
 
     [Fact]
@@ -29,13 +48,13 @@ public class DeliverOrderItemCommandHandlerTests
     {
         var (restaurant, item, group) = BuildScenario(OrderItemStatus.Ready, isHighQuality: true, hadFoodQualityEvent: false);
         var moodBefore = group.Members[0].Mood;
-        _repository.GetAsync(restaurant.RestaurantId, Arg.Any<CancellationToken>()).Returns(restaurant);
+        SetupRepos(restaurant);
 
         var result = await _handler.Handle(new DeliverOrderItemCommand(restaurant.RestaurantId, item.OrderItemId), CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
         item.Status.Should().Be(OrderItemStatus.Served);
-        group.Members[0].Mood.Should().Be(moodBefore + 10); // QualityAtServe=100 -> +10
+        group.Members[0].Mood.Should().Be(moodBefore + 10);
 
         await _publisher.Received(1).Publish(
             Arg.Is<OrderItemServed>(e => e.QualityAtServe == 100f && e.MoodBonus == 10f),
@@ -47,11 +66,10 @@ public class DeliverOrderItemCommandHandlerTests
     {
         var (restaurant, item, group) = BuildScenario(OrderItemStatus.Ready, isHighQuality: false, hadFoodQualityEvent: true);
         var moodBefore = group.Members[0].Mood;
-        _repository.GetAsync(restaurant.RestaurantId, Arg.Any<CancellationToken>()).Returns(restaurant);
+        SetupRepos(restaurant);
 
         await _handler.Handle(new DeliverOrderItemCommand(restaurant.RestaurantId, item.OrderItemId), CancellationToken.None);
 
-        // BaseQuality=30 (FoodQualityEvent, no hold) -> QualityAtServe=30 -> MoodBonus=-8
         group.Members[0].Mood.Should().Be(moodBefore - 8);
     }
 
@@ -60,11 +78,10 @@ public class DeliverOrderItemCommandHandlerTests
     {
         var (restaurant, item, group) = BuildScenario(OrderItemStatus.Ready, isHighQuality: false, hadFoodQualityEvent: false);
         var moodBefore = group.Members[0].Mood;
-        _repository.GetAsync(restaurant.RestaurantId, Arg.Any<CancellationToken>()).Returns(restaurant);
+        SetupRepos(restaurant);
 
         await _handler.Handle(new DeliverOrderItemCommand(restaurant.RestaurantId, item.OrderItemId), CancellationToken.None);
 
-        // BaseQuality=80 (standard, no hold) -> QualityAtServe=80 -> MoodBonus=0
         group.Members[0].Mood.Should().Be(moodBefore);
     }
 
@@ -72,14 +89,12 @@ public class DeliverOrderItemCommandHandlerTests
     public async Task Handle_AppliesHoldDecay_WhenItemWasHeldUnderLamp()
     {
         var (restaurant, item, group) = BuildScenario(OrderItemStatus.HeldUnderLamp, isHighQuality: true, hadFoodQualityEvent: false, heldSinceTick: 90);
-        restaurant.SimulationTick = 100; // 10 ticks held
+        restaurant.SimulationTick = 100;
         restaurant.Floor.HeatLamps[0].OccupiedSlots.Add(item.OrderItemId);
-        _repository.GetAsync(restaurant.RestaurantId, Arg.Any<CancellationToken>()).Returns(restaurant);
+        SetupRepos(restaurant);
 
         await _handler.Handle(new DeliverOrderItemCommand(restaurant.RestaurantId, item.OrderItemId), CancellationToken.None);
 
-        // IsHighQuality halves decay rate: EffectiveDecayRate = 1 x 0.5 = 0.5/tick.
-        // QualityAtServe = 100 - (10 x 0.5) = 95 -> still >= 90 -> MoodBonus +10.
         item.Status.Should().Be(OrderItemStatus.Served);
         restaurant.Floor.HeatLamps[0].OccupiedSlots.Should().NotContain(item.OrderItemId);
 
@@ -89,15 +104,15 @@ public class DeliverOrderItemCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_ReturnsFailure_WhenItemIsNotReadyOrHeld()
+    public async Task Handle_ReturnsFailure_WhenStationItemIsNotReadyOrHeld()
     {
         var (restaurant, item, _) = BuildScenario(OrderItemStatus.Cooking, isHighQuality: false, hadFoodQualityEvent: false);
-        _repository.GetAsync(restaurant.RestaurantId, Arg.Any<CancellationToken>()).Returns(restaurant);
+        SetupRepos(restaurant);
 
         var result = await _handler.Handle(new DeliverOrderItemCommand(restaurant.RestaurantId, item.OrderItemId), CancellationToken.None);
 
         result.IsFailure.Should().BeTrue();
-        item.Status.Should().Be(OrderItemStatus.Cooking); // unchanged
+        item.Status.Should().Be(OrderItemStatus.Cooking);
     }
 
     [Fact]
@@ -105,12 +120,74 @@ public class DeliverOrderItemCommandHandlerTests
     {
         var (restaurant, item, _) = BuildScenario(OrderItemStatus.Ready, isHighQuality: false, hadFoodQualityEvent: false);
         restaurant.StaffRoster.Staff[0].State = StaffState.Busy;
-        _repository.GetAsync(restaurant.RestaurantId, Arg.Any<CancellationToken>()).Returns(restaurant);
+        SetupRepos(restaurant);
 
         var result = await _handler.Handle(new DeliverOrderItemCommand(restaurant.RestaurantId, item.OrderItemId), CancellationToken.None);
 
         result.IsFailure.Should().BeTrue();
-        item.Status.Should().Be(OrderItemStatus.Ready); // unchanged
+        item.Status.Should().Be(OrderItemStatus.Ready);
+    }
+
+    [Fact]
+    public async Task Handle_DoesNotApplyMoodBonus_WhenCustomerIsAbsentFromTable()
+    {
+        var (restaurant, item, group) = BuildScenario(OrderItemStatus.Ready, isHighQuality: true, hadFoodQualityEvent: false);
+        group.Members[0].IsPresentAtTable = false;
+        var moodBefore = group.Members[0].Mood;
+        SetupRepos(restaurant);
+
+        var result = await _handler.Handle(new DeliverOrderItemCommand(restaurant.RestaurantId, item.OrderItemId), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        item.Status.Should().Be(OrderItemStatus.Served);
+        group.Members[0].Mood.Should().Be(moodBefore);
+
+        await _publisher.Received(1).Publish(
+            Arg.Is<OrderItemServed>(e => e.MoodBonus == 10f),
+            Arg.Any<CancellationToken>());
+    }
+
+    // --- New: pickup items (Drinks) — no station/cook, flat fetch-time gate ---
+
+    [Fact]
+    public async Task Handle_DeliversPickupItem_WhenFetchTimeHasElapsed()
+    {
+        var (restaurant, _, group) = BuildScenario(OrderItemStatus.Ready, isHighQuality: false, hadFoodQualityEvent: false);
+        var pickupItem = new OrderItem
+        {
+            OrderItemId = 2, OwnerId = 1, MenuItemId = 1, Phase = ItemPhase.Drinks, PriceAtOrder = 1.50m,
+            Status = OrderItemStatus.Queued, CreatedAtTick = 90 // Water: PrepTimeSeconds=2 -> ready at tick 92
+        };
+        restaurant.KitchenOps.ActiveOrders[0].Items.Add(pickupItem);
+        restaurant.SimulationTick = 92;
+        SetupRepos(restaurant);
+
+        var result = await _handler.Handle(new DeliverOrderItemCommand(restaurant.RestaurantId, pickupItem.OrderItemId), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        pickupItem.Status.Should().Be(OrderItemStatus.Served);
+        await _publisher.Received(1).Publish(
+            Arg.Is<OrderItemServed>(e => e.OrderItemId == pickupItem.OrderItemId && e.QualityAtServe == 80f),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_ReturnsFailure_WhenPickupItemFetchTimeNotElapsed()
+    {
+        var (restaurant, _, _) = BuildScenario(OrderItemStatus.Ready, isHighQuality: false, hadFoodQualityEvent: false);
+        var pickupItem = new OrderItem
+        {
+            OrderItemId = 2, OwnerId = 1, MenuItemId = 1, Phase = ItemPhase.Drinks, PriceAtOrder = 1.50m,
+            Status = OrderItemStatus.Queued, CreatedAtTick = 90
+        };
+        restaurant.KitchenOps.ActiveOrders[0].Items.Add(pickupItem);
+        restaurant.SimulationTick = 91; // only 1 tick elapsed, needs 2
+        SetupRepos(restaurant);
+
+        var result = await _handler.Handle(new DeliverOrderItemCommand(restaurant.RestaurantId, pickupItem.OrderItemId), CancellationToken.None);
+
+        result.IsFailure.Should().BeTrue();
+        pickupItem.Status.Should().Be(OrderItemStatus.Queued);
     }
 
     [Fact]
@@ -123,24 +200,22 @@ public class DeliverOrderItemCommandHandlerTests
         result.IsFailure.Should().BeTrue();
     }
 
-    [Fact]
-    public async Task Handle_DoesNotApplyMoodBonus_WhenCustomerIsAbsentFromTable()
+    private void SetupRepos(Restaurant restaurant)
     {
-        var (restaurant, item, group) = BuildScenario(OrderItemStatus.Ready, isHighQuality: true, hadFoodQualityEvent: false);
-        group.Members[0].IsPresentAtTable = false; // e.g. in the bathroom
-        var moodBefore = group.Members[0].Mood;
         _repository.GetAsync(restaurant.RestaurantId, Arg.Any<CancellationToken>()).Returns(restaurant);
 
-        var result = await _handler.Handle(new DeliverOrderItemCommand(restaurant.RestaurantId, item.OrderItemId), CancellationToken.None);
+        var config = new RestaurantConfig
+        {
+            ConfigId = "default_diner", StartingCash = 5000m, MinutesPerTick = 1, TicksPerRealSecond = 1,
+            TableLayoutId = "default_diner_layout", StaffRosterSeed = Array.Empty<(StaffRole, int)>(),
+            MenuItemIds = new[] { 1, 5 }, ReputationStart = 20f, QueueWaitMoodDecayRate = -0.4f,
+            CourseWaitMoodDecayRate = -0.3f, NaturalMoodRecoveryRate = 0.5f, ProbabilityCheckpointIntervalSeconds = 3f,
+            PathReplanMaxWaitSeconds = 5f, MaxCallAttempts = 3,
+            ActiveMealPeriods = new List<MealPeriodDefinition>(), EventModuleIds = Array.Empty<string>(),
+            TipBaseRate = 50f, TipMoodExponent = 0.75f, MaxQueueLength = 12, BaseArrivalIntervalSeconds = 120f
+        };
 
-        result.IsSuccess.Should().BeTrue();
-        item.Status.Should().Be(OrderItemStatus.Served); // still delivered
-        group.Members[0].Mood.Should().Be(moodBefore); // but no mood change while absent
-
-        // Event still reports what the bonus WOULD have been, for visibility.
-        await _publisher.Received(1).Publish(
-            Arg.Is<OrderItemServed>(e => e.MoodBonus == 10f),
-            Arg.Any<CancellationToken>());
+        _presetRepository.GetAsync(restaurant.ConfigId, Arg.Any<CancellationToken>()).Returns(config);
     }
 
     private static (Restaurant Restaurant, OrderItem Item, CustomerGroup Group) BuildScenario(
@@ -162,7 +237,8 @@ public class DeliverOrderItemCommandHandlerTests
         var item = new OrderItem
         {
             OrderItemId = 1, OwnerId = 1, MenuItemId = 5, Phase = ItemPhase.EntryMain, PriceAtOrder = 12.50m,
-            Status = status, IsHighQuality = isHighQuality, HadFoodQualityEvent = hadFoodQualityEvent, HeldSinceTick = heldSinceTick
+            Status = status, IsHighQuality = isHighQuality, HadFoodQualityEvent = hadFoodQualityEvent,
+            HeldSinceTick = heldSinceTick, CreatedAtTick = 0
         };
 
         var order = new Order { OrderId = 1, GroupId = 1, ClusterId = 10, Items = new List<OrderItem> { item }, CreatedAtTick = 0 };

@@ -87,7 +87,8 @@ public sealed class PlaceOrderCommandHandler : IRequestHandler<PlaceOrderCommand
                 MenuItemId = menuItem.MenuItemId,
                 Phase = request.Phase,
                 PriceAtOrder = menuItem.DefaultPrice,
-                Status = OrderItemStatus.Queued
+                Status = OrderItemStatus.Queued,
+                CreatedAtTick = restaurant.SimulationTick
             };
 
             order.Items.Add(orderItem);

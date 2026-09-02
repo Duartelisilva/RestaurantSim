@@ -255,7 +255,7 @@ public class AdvanceKitchenCommandHandlerTests
         var item = new OrderItem
         {
             OrderItemId = 1, OwnerId = 1, MenuItemId = 5, Phase = ItemPhase.EntryMain, PriceAtOrder = 12.50m,
-            Status = OrderItemStatus.Queued, TicketId = 1, PlannedStartTick = plannedStartTick
+            Status = OrderItemStatus.Queued, TicketId = 1, PlannedStartTick = plannedStartTick, CreatedAtTick = 0
         };
 
         var order = new Order { OrderId = 1, GroupId = 1, ClusterId = 10, Items = new List<OrderItem> { item }, CreatedAtTick = 0 };
@@ -325,7 +325,8 @@ public class AdvanceKitchenCommandHandlerTests
             MenuItemId = 5,
             Phase = ItemPhase.EntryMain,
             PriceAtOrder = 12.50m,
-            TicketId = ticket.TicketId
+            TicketId = ticket.TicketId,
+            CreatedAtTick = 0
         };
         restaurant.KitchenOps.ActiveOrders[0].Items.Add(item);
 
