@@ -1,15 +1,18 @@
 using RestaurantSim.Domain;
 using RestaurantSim.Domain.Abstractions;
 using RestaurantSim.Domain.CustomerService;
+using RestaurantSim.Domain.Floor;
 using RestaurantSim.Domain.KitchenOps;
 
 using RestaurantSim.Application.Commands.SeatGroup;
 using RestaurantSim.Application.Common;
+using RestaurantSim.Application.TickProcessing;
 
+using RestaurantSim.Infrastructure.BackgroundServices;
 using RestaurantSim.Infrastructure.Persistence;
-using RestaurantSim.Infrastructure.SignalR;
 using RestaurantSim.Infrastructure.Presets;
 using RestaurantSim.Infrastructure.Random;
+using RestaurantSim.Infrastructure.SignalR;
 
 using MediatR;
 using FluentValidation;
@@ -37,6 +40,15 @@ builder.Services.AddSingleton<IPresetRepository<RestaurantConfig>>(
 
 builder.Services.AddSingleton<IMenuRepository>(
     new InMemoryMenuRepository(DefaultDinerMenuSeed.Create()));
+
+builder.Services.AddTransient<RestaurantTickProcessor>();
+builder.Services.AddHostedService<SimulationTickService>();
+
+builder.Services.AddSingleton<ILayoutRepository>(
+    new InMemoryLayoutRepository(new Dictionary<string, Func<RestaurantLayout>>
+    {
+        ["default_diner_layout"] = DefaultDinerLayoutSeed.Create
+    }));
 
 var app = builder.Build();
 

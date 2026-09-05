@@ -1,12 +1,13 @@
 namespace RestaurantSim.Domain.Abstractions;
 
-// The aggregate's own persistence contract — lives in Domain, not Application
-// (architecture doc §4). MediatR handlers depend on this, never on concrete
-// storage, so swapping to real persistence later is Infrastructure-only.
 public interface IRestaurantRepository
 {
-    // Null return = no restaurant with that Id exists (not an exceptional case).
     Task<Restaurant?> GetAsync(Guid restaurantId, CancellationToken cancellationToken = default);
 
     Task SaveAsync(Restaurant restaurant, CancellationToken cancellationToken = default);
+
+    // New — needed by SimulationTickService to iterate every active restaurant
+    // each tick (multi-tenant model, entity doc §19). Not needed by any
+    // single-restaurant command, only by the tick loop itself.
+    Task<IReadOnlyList<Restaurant>> GetAllAsync(CancellationToken cancellationToken = default);
 }

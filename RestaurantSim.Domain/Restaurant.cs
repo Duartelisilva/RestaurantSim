@@ -24,6 +24,10 @@ public sealed class FloorState
     public List<KitchenStation> KitchenStations { get; init; } = new();
     public List<HeatLamp> HeatLamps { get; init; } = new();
     public List<Bathroom> Bathrooms { get; init; } = new();
+
+    // New — Freezer (entity doc §18a) was never actually added here; entity
+    // doc §19's field listing omits it. Real gap, not previously noticed.
+    public List<Freezer> Freezers { get; init; } = new();
 }
 
 public sealed class StaffRosterState
