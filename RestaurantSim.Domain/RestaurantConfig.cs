@@ -36,6 +36,12 @@ public sealed class RestaurantConfig
     // the current time means no arrivals and no staff clocked in.
     public required IReadOnlyList<MealPeriodDefinition> ActiveMealPeriods { get; init; }
 
+    // New — confirmed in chat, mechanics doc §13a's formula gap. Nullable, with
+    // code-level fallback defaults (derived from "~1.0 fatigue by end of a
+    // 12-hour shift" and "overtime is 2x more tiring") if left unset here.
+    public float? BaseFatigueAccrualRate { get; init; }
+    public float? OvertimeFatigueMultiplier { get; init; }
+
     // Which ISimulationModules are active for this restaurant.
     public required IReadOnlyList<string> EventModuleIds { get; init; }
 

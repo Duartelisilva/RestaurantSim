@@ -1,6 +1,8 @@
 using MediatR;
 using Microsoft.Extensions.Logging;
 using RestaurantSim.Application.Commands.AdvanceKitchen;
+using RestaurantSim.Application.Commands.AdvanceMood;
+using RestaurantSim.Application.Commands.AdvanceStaffShift;
 using RestaurantSim.Application.Commands.ProcessQueueAbandonment;
 using RestaurantSim.Application.Commands.SpawnArrival;
 using RestaurantSim.Application.Common;
@@ -8,13 +10,12 @@ using RestaurantSim.Domain.Abstractions;
 
 namespace RestaurantSim.Application.TickProcessing;
 
-// Extracted from SimulationTickService (Infrastructure) so this logic is
-// directly unit-testable without dealing with BackgroundService/PeriodicTimer
-// lifecycle. Dispatches only the pieces of the locked intra-tick execution
-// order (architecture doc §2a) that exist yet: AdvanceKitchen + SpawnArrival
-// (step 1 — resolve scheduled completions), then ProcessQueueAbandonment
-// (step 4 — deterministic threshold checks). Mood decay/recovery (step 2),
-// intra-group spread (step 3), and day/meal-period boundaries (step 5)
+// Dispatches the locked intra-tick execution order (architecture doc §2a) —
+// as much of it as exists yet:
+//   Step 1 (resolve scheduled completions): AdvanceKitchen, SpawnArrival
+//   Step 2 (continuous per-tick accumulation): AdvanceMood, AdvanceStaffShift
+//   Step 4 (deterministic threshold checks): ProcessQueueAbandonment
+// Step 3 (intra-group Mood spread) and step 5 (day/meal-period boundaries)
 // aren't built yet — they slot into this same sequence once they exist.
 public sealed class RestaurantTickProcessor
 {
@@ -40,14 +41,12 @@ public sealed class RestaurantTickProcessor
 
             await TryDispatchAsync(new AdvanceKitchenCommand(restaurant.RestaurantId), restaurant.RestaurantId, cancellationToken);
             await TryDispatchAsync(new SpawnArrivalCommand(restaurant.RestaurantId), restaurant.RestaurantId, cancellationToken);
+            await TryDispatchAsync(new AdvanceMoodCommand(restaurant.RestaurantId), restaurant.RestaurantId, cancellationToken);
+            await TryDispatchAsync(new AdvanceStaffShiftCommand(restaurant.RestaurantId), restaurant.RestaurantId, cancellationToken);
             await TryDispatchAsync(new ProcessQueueAbandonmentCommand(restaurant.RestaurantId), restaurant.RestaurantId, cancellationToken);
         }
     }
 
-    // A single restaurant's command failure or exception must not crash the
-    // loop or block other restaurants from ticking (multi-tenant isolation,
-    // architecture doc §2a's "restaurant A and restaurant B never block
-    // each other").
     private async Task TryDispatchAsync<TCommand>(TCommand command, Guid restaurantId, CancellationToken cancellationToken)
         where TCommand : IRequest<Result>
     {
