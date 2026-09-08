@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging;
 using RestaurantSim.Application.Commands.AdvanceKitchen;
 using RestaurantSim.Application.Commands.AdvanceMood;
 using RestaurantSim.Application.Commands.AdvanceStaffShift;
+using RestaurantSim.Application.Commands.EndDay;
 using RestaurantSim.Application.Commands.ProcessQueueAbandonment;
 using RestaurantSim.Application.Commands.SpawnArrival;
 using RestaurantSim.Application.Common;
@@ -11,12 +12,13 @@ using RestaurantSim.Domain.Abstractions;
 namespace RestaurantSim.Application.TickProcessing;
 
 // Dispatches the locked intra-tick execution order (architecture doc §2a) —
-// as much of it as exists yet:
+// now complete for everything that's been built:
 //   Step 1 (resolve scheduled completions): AdvanceKitchen, SpawnArrival
 //   Step 2 (continuous per-tick accumulation): AdvanceMood, AdvanceStaffShift
 //   Step 4 (deterministic threshold checks): ProcessQueueAbandonment
-// Step 3 (intra-group Mood spread) and step 5 (day/meal-period boundaries)
-// aren't built yet — they slot into this same sequence once they exist.
+//   Step 5 (day/meal-period boundary check): EndDayCommand — last, since it
+//     depends on queue/active-group counts step 4 could have just changed
+// Step 3 (intra-group Mood spread) is the only remaining gap in this sequence.
 public sealed class RestaurantTickProcessor
 {
     private readonly IRestaurantRepository _repository;
@@ -44,6 +46,7 @@ public sealed class RestaurantTickProcessor
             await TryDispatchAsync(new AdvanceMoodCommand(restaurant.RestaurantId), restaurant.RestaurantId, cancellationToken);
             await TryDispatchAsync(new AdvanceStaffShiftCommand(restaurant.RestaurantId), restaurant.RestaurantId, cancellationToken);
             await TryDispatchAsync(new ProcessQueueAbandonmentCommand(restaurant.RestaurantId), restaurant.RestaurantId, cancellationToken);
+            await TryDispatchAsync(new EndDayCommand(restaurant.RestaurantId), restaurant.RestaurantId, cancellationToken);
         }
     }
 
