@@ -6,19 +6,21 @@ using RestaurantSim.Application.Commands.AdvanceStaffShift;
 using RestaurantSim.Application.Commands.EndDay;
 using RestaurantSim.Application.Commands.ProcessQueueAbandonment;
 using RestaurantSim.Application.Commands.SpawnArrival;
+using RestaurantSim.Application.Commands.SpreadGroupMood;
 using RestaurantSim.Application.Common;
 using RestaurantSim.Domain.Abstractions;
 
 namespace RestaurantSim.Application.TickProcessing;
 
-// Dispatches the locked intra-tick execution order (architecture doc §2a) —
-// now complete for everything that's been built:
+// Dispatches the FULL locked intra-tick execution order (architecture doc
+// §2a) — every step now has an implementation:
 //   Step 1 (resolve scheduled completions): AdvanceKitchen, SpawnArrival
 //   Step 2 (continuous per-tick accumulation): AdvanceMood, AdvanceStaffShift
+//   Step 3 (intra-group Mood spread): SpreadGroupMood — reads this tick's
+//     already-decayed Mood from step 2, must run after it
 //   Step 4 (deterministic threshold checks): ProcessQueueAbandonment
-//   Step 5 (day/meal-period boundary check): EndDayCommand — last, since it
-//     depends on queue/active-group counts step 4 could have just changed
-// Step 3 (intra-group Mood spread) is the only remaining gap in this sequence.
+//   Step 5 (day/meal-period boundary check): EndDayCommand — last, depends
+//     on queue/active-group counts step 4 could have just changed
 public sealed class RestaurantTickProcessor
 {
     private readonly IRestaurantRepository _repository;
@@ -45,6 +47,7 @@ public sealed class RestaurantTickProcessor
             await TryDispatchAsync(new SpawnArrivalCommand(restaurant.RestaurantId), restaurant.RestaurantId, cancellationToken);
             await TryDispatchAsync(new AdvanceMoodCommand(restaurant.RestaurantId), restaurant.RestaurantId, cancellationToken);
             await TryDispatchAsync(new AdvanceStaffShiftCommand(restaurant.RestaurantId), restaurant.RestaurantId, cancellationToken);
+            await TryDispatchAsync(new SpreadGroupMoodCommand(restaurant.RestaurantId), restaurant.RestaurantId, cancellationToken);
             await TryDispatchAsync(new ProcessQueueAbandonmentCommand(restaurant.RestaurantId), restaurant.RestaurantId, cancellationToken);
             await TryDispatchAsync(new EndDayCommand(restaurant.RestaurantId), restaurant.RestaurantId, cancellationToken);
         }

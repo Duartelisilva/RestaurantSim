@@ -8,6 +8,7 @@ using RestaurantSim.Application.Commands.AdvanceStaffShift;
 using RestaurantSim.Application.Commands.EndDay;
 using RestaurantSim.Application.Commands.ProcessQueueAbandonment;
 using RestaurantSim.Application.Commands.SpawnArrival;
+using RestaurantSim.Application.Commands.SpreadGroupMood;
 using RestaurantSim.Application.Common;
 using RestaurantSim.Application.TickProcessing;
 using RestaurantSim.Domain;
@@ -42,7 +43,7 @@ public class RestaurantTickProcessorTests
     }
 
     [Fact]
-    public async Task AdvanceAllRestaurantsAsync_DispatchesAllSixCommands_PerRestaurant()
+    public async Task AdvanceAllRestaurantsAsync_DispatchesAllSevenCommands_PerRestaurant()
     {
         var restaurant = BuildRestaurant(simulationTick: 100);
         _repository.GetAllAsync(Arg.Any<CancellationToken>()).Returns(new List<Restaurant> { restaurant });
@@ -53,6 +54,7 @@ public class RestaurantTickProcessorTests
         await _sender.Received(1).Send(Arg.Any<SpawnArrivalCommand>(), Arg.Any<CancellationToken>());
         await _sender.Received(1).Send(Arg.Any<AdvanceMoodCommand>(), Arg.Any<CancellationToken>());
         await _sender.Received(1).Send(Arg.Any<AdvanceStaffShiftCommand>(), Arg.Any<CancellationToken>());
+        await _sender.Received(1).Send(Arg.Any<SpreadGroupMoodCommand>(), Arg.Any<CancellationToken>());
         await _sender.Received(1).Send(Arg.Any<ProcessQueueAbandonmentCommand>(), Arg.Any<CancellationToken>());
         await _sender.Received(1).Send(Arg.Any<EndDayCommand>(), Arg.Any<CancellationToken>());
     }
@@ -68,8 +70,8 @@ public class RestaurantTickProcessorTests
 
         restaurantA.SimulationTick.Should().Be(101);
         restaurantB.SimulationTick.Should().Be(201);
-        await _sender.Received(6).Send(Arg.Is<IRequest<Result>>(r => BelongsTo(r, restaurantA.RestaurantId)), Arg.Any<CancellationToken>());
-        await _sender.Received(6).Send(Arg.Is<IRequest<Result>>(r => BelongsTo(r, restaurantB.RestaurantId)), Arg.Any<CancellationToken>());
+        await _sender.Received(7).Send(Arg.Is<IRequest<Result>>(r => BelongsTo(r, restaurantA.RestaurantId)), Arg.Any<CancellationToken>());
+        await _sender.Received(7).Send(Arg.Is<IRequest<Result>>(r => BelongsTo(r, restaurantB.RestaurantId)), Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -118,6 +120,7 @@ public class RestaurantTickProcessorTests
         SpawnArrivalCommand c => c.RestaurantId == restaurantId,
         AdvanceMoodCommand c => c.RestaurantId == restaurantId,
         AdvanceStaffShiftCommand c => c.RestaurantId == restaurantId,
+        SpreadGroupMoodCommand c => c.RestaurantId == restaurantId,
         ProcessQueueAbandonmentCommand c => c.RestaurantId == restaurantId,
         EndDayCommand c => c.RestaurantId == restaurantId,
         _ => false
