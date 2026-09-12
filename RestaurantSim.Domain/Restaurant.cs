@@ -3,6 +3,7 @@ using RestaurantSim.Domain.Events;
 using RestaurantSim.Domain.Floor;
 using RestaurantSim.Domain.KitchenOps;
 using RestaurantSim.Domain.Staff;
+using RestaurantSim.Domain.Statistics;
 
 namespace RestaurantSim.Domain;
 
@@ -102,6 +103,7 @@ public sealed class Restaurant
         [AutoManagerSystem.TaskPriority] = true
     };
 
-    // SnapshotHistory deliberately excluded — stats are written OUT to
-    // ISnapshotStore, never accumulated on this hot aggregate (entity doc §19).
+    // New — running daily totals, fed by BillPaidStatsHandler/GroupLeftStatsHandler
+    // and per-tick occupancy sampling, reset by EndDayCommand each day.
+    public DailyStatsAccumulator DailyStats { get; init; } = new();
 }

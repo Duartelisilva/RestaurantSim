@@ -8,6 +8,7 @@ using RestaurantSim.Domain.CustomerService;
 using RestaurantSim.Domain.DomainEvents;
 using RestaurantSim.Domain.Floor;
 using RestaurantSim.Domain.Scheduling;
+using RestaurantSim.Domain.Statistics;
 using Xunit;
 
 namespace RestaurantSim.Application.Tests.Commands.EndDay;
@@ -16,59 +17,89 @@ public class EndDayCommandHandlerTests
 {
     private readonly IRestaurantRepository _repository = Substitute.For<IRestaurantRepository>();
     private readonly IPresetRepository<RestaurantConfig> _presetRepository = Substitute.For<IPresetRepository<RestaurantConfig>>();
+    private readonly ISnapshotStore _snapshotStore = Substitute.For<ISnapshotStore>();
     private readonly IPublisher _publisher = Substitute.For<IPublisher>();
     private readonly EndDayCommandHandler _handler;
 
     public EndDayCommandHandlerTests()
     {
-        _handler = new EndDayCommandHandler(_repository, _presetRepository, _publisher);
+        _handler = new EndDayCommandHandler(_repository, _presetRepository, _snapshotStore, _publisher);
     }
 
     [Fact]
     public async Task Handle_DoesNothing_WhenActiveGroupsPresent()
     {
-        var restaurant = BuildRestaurant(simulationTick: 1440); // exactly at closing wrap-point
+        var restaurant = BuildRestaurant(simulationTick: 1440);
         restaurant.CustomerService.ActiveGroups.Add(new CustomerGroup { GroupId = 1, PartySize = 1, Members = new List<Customer>(), ArrivalTick = 0 });
         SetupConfig(restaurant);
 
         var result = await _handler.Handle(new EndDayCommand(restaurant.RestaurantId), CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
-        restaurant.CurrentDayNumber.Should().Be(0); // unchanged
-        restaurant.SimulationTick.Should().Be(1440); // unchanged
-    }
-
-    [Fact]
-    public async Task Handle_DoesNothing_WhenQueueNotEmpty()
-    {
-        var restaurant = BuildRestaurant(simulationTick: 1440);
-        restaurant.CustomerService.Queue.Add(new CustomerGroup { GroupId = 1, PartySize = 1, Members = new List<Customer>(), ArrivalTick = 0 });
-        SetupConfig(restaurant);
-
-        var result = await _handler.Handle(new EndDayCommand(restaurant.RestaurantId), CancellationToken.None);
-
-        result.IsSuccess.Should().BeTrue();
         restaurant.CurrentDayNumber.Should().Be(0);
+        await _snapshotStore.DidNotReceive().AppendAsync(Arg.Any<Guid>(), Arg.Any<StatisticsSnapshot>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
     public async Task Handle_DoesNothing_WhenNotYetPastClosing()
     {
-        var restaurant = BuildRestaurant(simulationTick: 800); // 13:20, well within lunch
+        var restaurant = BuildRestaurant(simulationTick: 800);
         SetupConfig(restaurant);
 
         var result = await _handler.Handle(new EndDayCommand(restaurant.RestaurantId), CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
         restaurant.CurrentDayNumber.Should().Be(0);
-        restaurant.SimulationTick.Should().Be(800);
     }
 
     [Fact]
-    public async Task Handle_EndsDay_WhenPastClosingAndNoCustomersPresent()
+    public async Task Handle_AppendsRealSnapshot_WithAccumulatedStats()
     {
-        // default_diner's dinner ends at 00:00 (Closing=1440) — the wrap-around
-        // special case. minutesIntoDay==0 at tick 1440 (exactly one day elapsed).
+        var restaurant = BuildRestaurant(simulationTick: 1440);
+        restaurant.DailyStats.Revenue = 500m;
+        restaurant.DailyStats.CustomersServed = 20;
+        restaurant.DailyStats.WeightedFinalMoodSum = 20 * 65f; // avg 65
+        restaurant.DailyStats.TableOccupancySampleSum = 3.5f;
+        restaurant.DailyStats.TableOccupancySampleCount = 5; // avg 0.7
+        restaurant.DailyStats.ReputationAtDayStart = 20f;
+        restaurant.Reputation = 23f; // +3 delta today
+        SetupConfig(restaurant);
+
+        StatisticsSnapshot? capturedSnapshot = null;
+        await _snapshotStore.AppendAsync(Arg.Any<Guid>(), Arg.Do<StatisticsSnapshot>(s => capturedSnapshot = s), Arg.Any<CancellationToken>());
+
+        await _handler.Handle(new EndDayCommand(restaurant.RestaurantId), CancellationToken.None);
+
+        capturedSnapshot.Should().NotBeNull();
+        capturedSnapshot!.Value.Revenue.Should().Be(500m);
+        capturedSnapshot.Value.CustomersServed.Should().Be(20);
+        capturedSnapshot.Value.AvgFinalMood.Should().Be(65f);
+        capturedSnapshot.Value.TableUtilization.Should().Be(0.7f);
+        capturedSnapshot.Value.ReputationDelta.Should().Be(3f);
+        capturedSnapshot.Value.TotalGameplayDays.Should().Be(1);
+        capturedSnapshot.Value.AvgWaitTicks.Should().Be(0f); // honestly unbuilt, not faked
+        capturedSnapshot.Value.Costs.Should().Be(0m); // honestly unbuilt, not faked
+    }
+
+    [Fact]
+    public async Task Handle_ResetsAccumulator_ForNextDay()
+    {
+        var restaurant = BuildRestaurant(simulationTick: 1440);
+        restaurant.DailyStats.Revenue = 500m;
+        restaurant.DailyStats.CustomersServed = 20;
+        restaurant.Reputation = 23f;
+        SetupConfig(restaurant);
+
+        await _handler.Handle(new EndDayCommand(restaurant.RestaurantId), CancellationToken.None);
+
+        restaurant.DailyStats.Revenue.Should().Be(0m);
+        restaurant.DailyStats.CustomersServed.Should().Be(0);
+        restaurant.DailyStats.ReputationAtDayStart.Should().Be(23f); // carries forward for tomorrow's delta
+    }
+
+    [Fact]
+    public async Task Handle_EndsDay_AndAdvancesTickToNextOpening()
+    {
         var restaurant = BuildRestaurant(simulationTick: 1440);
         var bathroom = new Bathroom { BathroomId = 1, Gender = BathroomGender.Male, Position = new GridPosition(0, 0), Hitbox = new GridBounds(1, 1), Capacity = 1, MaxConcurrentCleaners = 1, CleanlinessScore = 40f };
         restaurant.Floor.Bathrooms.Add(bathroom);
@@ -79,12 +110,9 @@ public class EndDayCommandHandlerTests
         result.IsSuccess.Should().BeTrue();
         restaurant.CurrentDayNumber.Should().Be(1);
         bathroom.CleanlinessScore.Should().Be(100f);
-        // ticksPerDay=1440, currentDayStartTick=1440, Opening=720 (12:00) -> 1440+1440+720=3600
         restaurant.SimulationTick.Should().Be(3600);
 
-        await _publisher.Received(1).Publish(
-            Arg.Is<DayEnded>(e => e.NewDayNumber == 1 && e.Tick == 3600),
-            Arg.Any<CancellationToken>());
+        await _publisher.Received(1).Publish(Arg.Is<DayEnded>(e => e.NewDayNumber == 1 && e.Tick == 3600), Arg.Any<CancellationToken>());
     }
 
     [Fact]

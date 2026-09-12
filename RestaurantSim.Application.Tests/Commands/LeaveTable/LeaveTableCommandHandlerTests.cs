@@ -38,7 +38,7 @@ public class LeaveTableCommandHandlerTests
         table2.IsClean.Should().BeFalse();
 
         await _publisher.Received(1).Publish(
-            Arg.Is<GroupLeft>(e => e.GroupId == group.GroupId && e.ClusterId == cluster.ClusterId),
+            Arg.Is<GroupLeft>(e => e.GroupId == group.GroupId && e.ClusterId == cluster.ClusterId && e.PartySize == group.PartySize),
             Arg.Any<CancellationToken>());
     }
 
@@ -57,13 +57,13 @@ public class LeaveTableCommandHandlerTests
     public async Task Handle_ReturnsFailure_WhenGroupHasNotPaidYet()
     {
         var (restaurant, group, _, _, _) = BuildScenario();
-        group.LifecycleState = GroupLifecycleState.Seated; // hasn't paid
+        group.LifecycleState = GroupLifecycleState.Seated;
         _repository.GetAsync(restaurant.RestaurantId, Arg.Any<CancellationToken>()).Returns(restaurant);
 
         var result = await _handler.Handle(new LeaveTableCommand(restaurant.RestaurantId, group.GroupId), CancellationToken.None);
 
         result.IsFailure.Should().BeTrue();
-        restaurant.CustomerService.ActiveGroups.Should().Contain(group); // unchanged
+        restaurant.CustomerService.ActiveGroups.Should().Contain(group);
     }
 
     [Fact]
@@ -97,7 +97,7 @@ public class LeaveTableCommandHandlerTests
 
         var group = new CustomerGroup
         {
-            GroupId = 1, PartySize = 1, Members = new List<Customer> { customer }, ArrivalTick = 0,
+            GroupId = 1, PartySize = 2, Members = new List<Customer> { customer }, ArrivalTick = 0,
             ClusterId = 10, LifecycleState = GroupLifecycleState.Leaving, CoursePhase = CoursePhase.Done,
             CurrentOrderId = 1
         };

@@ -3,6 +3,7 @@ using RestaurantSim.Application.Common;
 using RestaurantSim.Domain;
 using RestaurantSim.Domain.Abstractions;
 using RestaurantSim.Domain.Staff;
+using RestaurantSim.Domain.Statistics;
 
 namespace RestaurantSim.Application.Commands.CreateRestaurant;
 
@@ -51,7 +52,11 @@ public sealed class CreateRestaurantCommandHandler : IRequestHandler<CreateResta
             StaffRoster = new StaffRosterState { Staff = SeedStaff(config) },
             CustomerService = new CustomerServiceState(),
             KitchenOps = new KitchenOpsState(),
-            Events = new EventState()
+            Events = new EventState(),
+            // Seeds day-1's ReputationDelta baseline correctly — without this,
+            // EndDayCommand would compute day 1's delta against 0 instead of
+            // the actual starting Reputation, overstating it.
+            DailyStats = new DailyStatsAccumulator { ReputationAtDayStart = config.ReputationStart }
         };
 
         await _repository.SaveAsync(restaurant, cancellationToken);
@@ -59,18 +64,6 @@ public sealed class CreateRestaurantCommandHandler : IRequestHandler<CreateResta
         return Result<Guid>.Success(restaurant.RestaurantId);
     }
 
-    // Every stat defaults to entity doc §7's own stated baseline (0.5 = average,
-    // no modifier), except Fatigue=0 (fresh, hasn't worked yet). No random-
-    // stat-rolled hiring pool exists yet — that's explicitly DLC (business
-    // logic §6). Names are a placeholder scheme ("Waiter 1", "Cook 2") — no
-    // real name-generation system exists anywhere in the docs.
-    //
-    // Staff start as Idle, NOT OffShift — flagged, not an oversight. OffShift
-    // should apply outside a staff member's AssignedMealPeriods (entity doc
-    // §24a), but the ShiftStart/ShiftEnd clock-in/out logic that would compute
-    // that isn't built yet (remaining Phase 5 work). Starting everyone OffShift
-    // now would make a freshly-created restaurant totally inert — nothing
-    // would ever cook, seat, or deliver. Revisit once shift clock-in exists.
     private static List<StaffMember> SeedStaff(RestaurantConfig config)
     {
         var staff = new List<StaffMember>();

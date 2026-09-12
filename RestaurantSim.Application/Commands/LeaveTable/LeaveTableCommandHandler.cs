@@ -37,10 +37,6 @@ public sealed class LeaveTableCommandHandler : IRequestHandler<LeaveTableCommand
         if (cluster is null)
             return Result.Failure($"Cluster {group.ClusterId} does not exist.");
 
-        // Free the cluster and dirty each member table (business logic §1.3) —
-        // a Busser must clean each one before it's usable again. TableCluster.
-        // State is derived (entity doc §5), so this alone is enough for the
-        // cluster to correctly report NeedsCleaning next time it's queried.
         cluster.OccupiedBy = null;
         foreach (var tableId in cluster.TableIds)
         {
@@ -50,16 +46,10 @@ public sealed class LeaveTableCommandHandler : IRequestHandler<LeaveTableCommand
         }
 
         var finalAverageMood = group.Members.Count > 0 ? group.Members.Average(m => m.Mood) : 0f;
+        var partySize = group.PartySize;
 
-        // Group is now fully gone — no "Left"/"Gone" LifecycleState value exists
-        // (entity doc §8 only has Arriving/Queued/Seated/Leaving), so removal
-        // from ActiveGroups IS the terminal step, matching entity doc §21's own
-        // "LifecycleState reaches Leaving/gone" phrasing for event resolution.
         restaurant.CustomerService.ActiveGroups.Remove(group);
 
-        // The group's Order is no longer active either. No archival/history
-        // mechanism exists yet (ISnapshotStore isn't built) — this data is lost
-        // once removed, not persisted for stats. Flagged in pending-doc-changes.
         if (group.CurrentOrderId is int orderId)
         {
             var order = restaurant.KitchenOps.ActiveOrders.FirstOrDefault(o => o.OrderId == orderId);
@@ -70,7 +60,7 @@ public sealed class LeaveTableCommandHandler : IRequestHandler<LeaveTableCommand
         await _repository.SaveAsync(restaurant, cancellationToken);
 
         await _publisher.Publish(
-            new GroupLeft(restaurant.RestaurantId, group.GroupId, cluster.ClusterId, (float)finalAverageMood, restaurant.SimulationTick),
+            new GroupLeft(restaurant.RestaurantId, group.GroupId, cluster.ClusterId, partySize, (float)finalAverageMood, restaurant.SimulationTick),
             cancellationToken);
 
         return Result.Success();

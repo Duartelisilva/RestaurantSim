@@ -50,6 +50,8 @@ builder.Services.AddSingleton<ILayoutRepository>(
         ["default_diner_layout"] = DefaultDinerLayoutSeed.Create
     }));
 
+builder.Services.AddSingleton<ISnapshotStore, InMemorySnapshotStore>();
+
 var app = builder.Build();
 
 app.MapHub<RestaurantHub>("/hubs/restaurant");

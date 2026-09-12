@@ -16,11 +16,13 @@ namespace RestaurantSim.Application.TickProcessing;
 // §2a) — every step now has an implementation:
 //   Step 1 (resolve scheduled completions): AdvanceKitchen, SpawnArrival
 //   Step 2 (continuous per-tick accumulation): AdvanceMood, AdvanceStaffShift
-//   Step 3 (intra-group Mood spread): SpreadGroupMood — reads this tick's
-//     already-decayed Mood from step 2, must run after it
+//   Step 3 (intra-group Mood spread): SpreadGroupMood
 //   Step 4 (deterministic threshold checks): ProcessQueueAbandonment
-//   Step 5 (day/meal-period boundary check): EndDayCommand — last, depends
-//     on queue/active-group counts step 4 could have just changed
+//   Step 5 (day/meal-period boundary check): EndDayCommand
+// Table-occupancy sampling (feeds StatisticsSnapshot.TableUtilization) is
+// done inline here, same treatment as the SimulationTick++ increment right
+// above it — simple aggregate bookkeeping, not business logic warranting a
+// full dispatched command.
 public sealed class RestaurantTickProcessor
 {
     private readonly IRestaurantRepository _repository;
@@ -41,6 +43,14 @@ public sealed class RestaurantTickProcessor
         foreach (var restaurant in restaurants)
         {
             restaurant.SimulationTick++;
+
+            if (restaurant.Floor.Clusters.Count > 0)
+            {
+                var occupiedFraction = restaurant.Floor.Clusters.Count(c => c.OccupiedBy != null) / (float)restaurant.Floor.Clusters.Count;
+                restaurant.DailyStats.TableOccupancySampleSum += occupiedFraction;
+                restaurant.DailyStats.TableOccupancySampleCount++;
+            }
+
             await _repository.SaveAsync(restaurant, cancellationToken);
 
             await TryDispatchAsync(new AdvanceKitchenCommand(restaurant.RestaurantId), restaurant.RestaurantId, cancellationToken);
