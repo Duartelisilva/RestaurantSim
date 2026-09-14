@@ -4,6 +4,7 @@ using RestaurantSim.Domain.CustomerService;
 using RestaurantSim.Domain.Floor;
 using RestaurantSim.Domain.KitchenOps;
 
+using RestaurantSim.Application.AutoManager;
 using RestaurantSim.Application.Commands.SeatGroup;
 using RestaurantSim.Application.Common;
 using RestaurantSim.Application.TickProcessing;
@@ -13,6 +14,9 @@ using RestaurantSim.Infrastructure.Persistence;
 using RestaurantSim.Infrastructure.Presets;
 using RestaurantSim.Infrastructure.Random;
 using RestaurantSim.Infrastructure.SignalR;
+
+using RestaurantSim.AutoManager;
+using RestaurantSim.AutoManager.Strategies.Seating;
 
 using MediatR;
 using FluentValidation;
@@ -51,6 +55,9 @@ builder.Services.AddSingleton<ILayoutRepository>(
     }));
 
 builder.Services.AddSingleton<ISnapshotStore, InMemorySnapshotStore>();
+
+builder.Services.AddScoped<ISeatingStrategy, DefaultSeatingStrategy>();
+builder.Services.AddScoped<IAutoManagerRunner, AutoManagerProcessor>();
 
 var app = builder.Build();
 

@@ -2,6 +2,7 @@ using FluentAssertions;
 using MediatR;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
+using RestaurantSim.Application.AutoManager;
 using RestaurantSim.Application.Commands.AdvanceKitchen;
 using RestaurantSim.Application.Commands.AdvanceMood;
 using RestaurantSim.Application.Commands.AdvanceStaffShift;
@@ -21,12 +22,13 @@ public class RestaurantTickProcessorTests
 {
     private readonly IRestaurantRepository _repository = Substitute.For<IRestaurantRepository>();
     private readonly ISender _sender = Substitute.For<ISender>();
+    private readonly IAutoManagerRunner _autoManagerRunner = Substitute.For<IAutoManagerRunner>();
     private readonly ILogger<RestaurantTickProcessor> _logger = Substitute.For<ILogger<RestaurantTickProcessor>>();
     private readonly RestaurantTickProcessor _processor;
 
     public RestaurantTickProcessorTests()
     {
-        _processor = new RestaurantTickProcessor(_repository, _sender, _logger);
+        _processor = new RestaurantTickProcessor(_repository, _sender, _autoManagerRunner, _logger);
         _sender.Send(Arg.Any<IRequest<Result>>(), Arg.Any<CancellationToken>()).Returns(Result.Success());
     }
 
@@ -60,6 +62,17 @@ public class RestaurantTickProcessorTests
     }
 
     [Fact]
+    public async Task AdvanceAllRestaurantsAsync_RunsAutoManagerPass_AfterTickCommands_PerRestaurant()
+    {
+        var restaurant = BuildRestaurant(simulationTick: 100);
+        _repository.GetAllAsync(Arg.Any<CancellationToken>()).Returns(new List<Restaurant> { restaurant });
+
+        await _processor.AdvanceAllRestaurantsAsync(CancellationToken.None);
+
+        await _autoManagerRunner.Received(1).RunPassAsync(restaurant.RestaurantId, Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
     public async Task AdvanceAllRestaurantsAsync_ProcessesEachRestaurantIndependently()
     {
         var restaurantA = BuildRestaurant(simulationTick: 100);
@@ -70,8 +83,8 @@ public class RestaurantTickProcessorTests
 
         restaurantA.SimulationTick.Should().Be(101);
         restaurantB.SimulationTick.Should().Be(201);
-        await _sender.Received(7).Send(Arg.Is<IRequest<Result>>(r => BelongsTo(r, restaurantA.RestaurantId)), Arg.Any<CancellationToken>());
-        await _sender.Received(7).Send(Arg.Is<IRequest<Result>>(r => BelongsTo(r, restaurantB.RestaurantId)), Arg.Any<CancellationToken>());
+        await _autoManagerRunner.Received(1).RunPassAsync(restaurantA.RestaurantId, Arg.Any<CancellationToken>());
+        await _autoManagerRunner.Received(1).RunPassAsync(restaurantB.RestaurantId, Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -104,6 +117,21 @@ public class RestaurantTickProcessorTests
     }
 
     [Fact]
+    public async Task AdvanceAllRestaurantsAsync_ContinuesProcessing_WhenAutoManagerThrows()
+    {
+        var restaurantA = BuildRestaurant(simulationTick: 100);
+        var restaurantB = BuildRestaurant(simulationTick: 200);
+        _repository.GetAllAsync(Arg.Any<CancellationToken>()).Returns(new List<Restaurant> { restaurantA, restaurantB });
+        _autoManagerRunner.RunPassAsync(restaurantA.RestaurantId, Arg.Any<CancellationToken>())
+            .Returns(Task.FromException(new InvalidOperationException("boom")));
+
+        var act = async () => await _processor.AdvanceAllRestaurantsAsync(CancellationToken.None);
+
+        await act.Should().NotThrowAsync();
+        restaurantB.SimulationTick.Should().Be(201);
+    }
+
+    [Fact]
     public async Task AdvanceAllRestaurantsAsync_DoesNothing_WhenNoRestaurantsExist()
     {
         _repository.GetAllAsync(Arg.Any<CancellationToken>()).Returns(new List<Restaurant>());
@@ -112,19 +140,8 @@ public class RestaurantTickProcessorTests
 
         await act.Should().NotThrowAsync();
         await _sender.DidNotReceive().Send(Arg.Any<IRequest<Result>>(), Arg.Any<CancellationToken>());
+        await _autoManagerRunner.DidNotReceive().RunPassAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>());
     }
-
-    private static bool BelongsTo(IRequest<Result> request, Guid restaurantId) => request switch
-    {
-        AdvanceKitchenCommand c => c.RestaurantId == restaurantId,
-        SpawnArrivalCommand c => c.RestaurantId == restaurantId,
-        AdvanceMoodCommand c => c.RestaurantId == restaurantId,
-        AdvanceStaffShiftCommand c => c.RestaurantId == restaurantId,
-        SpreadGroupMoodCommand c => c.RestaurantId == restaurantId,
-        ProcessQueueAbandonmentCommand c => c.RestaurantId == restaurantId,
-        EndDayCommand c => c.RestaurantId == restaurantId,
-        _ => false
-    };
 
     private static Restaurant BuildRestaurant(long simulationTick) => new()
     {

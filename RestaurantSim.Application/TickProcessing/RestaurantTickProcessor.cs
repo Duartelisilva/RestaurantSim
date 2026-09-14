@@ -1,5 +1,6 @@
 using MediatR;
 using Microsoft.Extensions.Logging;
+using RestaurantSim.Application.AutoManager;
 using RestaurantSim.Application.Commands.AdvanceKitchen;
 using RestaurantSim.Application.Commands.AdvanceMood;
 using RestaurantSim.Application.Commands.AdvanceStaffShift;
@@ -13,26 +14,28 @@ using RestaurantSim.Domain.Abstractions;
 namespace RestaurantSim.Application.TickProcessing;
 
 // Dispatches the FULL locked intra-tick execution order (architecture doc
-// §2a) — every step now has an implementation:
-//   Step 1 (resolve scheduled completions): AdvanceKitchen, SpawnArrival
-//   Step 2 (continuous per-tick accumulation): AdvanceMood, AdvanceStaffShift
-//   Step 3 (intra-group Mood spread): SpreadGroupMood
-//   Step 4 (deterministic threshold checks): ProcessQueueAbandonment
-//   Step 5 (day/meal-period boundary check): EndDayCommand
-// Table-occupancy sampling (feeds StatisticsSnapshot.TableUtilization) is
-// done inline here, same treatment as the SimulationTick++ increment right
-// above it — simple aggregate bookkeeping, not business logic warranting a
-// full dispatched command.
+// §2a), THEN runs AutoManager's own pass for that restaurant — "AutoManager
+// does not run inside the tick... runs as its own sequential pass immediately
+// after a tick finishes and releases the lock" (architecture doc §11). The
+// tick's own per-command locks are already released by the time each
+// TryDispatchAsync call returns, so calling IAutoManagerRunner right after
+// satisfies this ordering without any extra synchronization.
 public sealed class RestaurantTickProcessor
 {
     private readonly IRestaurantRepository _repository;
     private readonly ISender _sender;
+    private readonly IAutoManagerRunner _autoManagerRunner;
     private readonly ILogger<RestaurantTickProcessor> _logger;
 
-    public RestaurantTickProcessor(IRestaurantRepository repository, ISender sender, ILogger<RestaurantTickProcessor> logger)
+    public RestaurantTickProcessor(
+        IRestaurantRepository repository,
+        ISender sender,
+        IAutoManagerRunner autoManagerRunner,
+        ILogger<RestaurantTickProcessor> logger)
     {
         _repository = repository;
         _sender = sender;
+        _autoManagerRunner = autoManagerRunner;
         _logger = logger;
     }
 
@@ -60,6 +63,8 @@ public sealed class RestaurantTickProcessor
             await TryDispatchAsync(new SpreadGroupMoodCommand(restaurant.RestaurantId), restaurant.RestaurantId, cancellationToken);
             await TryDispatchAsync(new ProcessQueueAbandonmentCommand(restaurant.RestaurantId), restaurant.RestaurantId, cancellationToken);
             await TryDispatchAsync(new EndDayCommand(restaurant.RestaurantId), restaurant.RestaurantId, cancellationToken);
+
+            await TryRunAutoManagerAsync(restaurant.RestaurantId, cancellationToken);
         }
     }
 
@@ -75,6 +80,18 @@ public sealed class RestaurantTickProcessor
         catch (Exception ex)
         {
             _logger.LogError(ex, "Tick command {Command} threw for restaurant {RestaurantId}", typeof(TCommand).Name, restaurantId);
+        }
+    }
+
+    private async Task TryRunAutoManagerAsync(Guid restaurantId, CancellationToken cancellationToken)
+    {
+        try
+        {
+            await _autoManagerRunner.RunPassAsync(restaurantId, cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "AutoManager pass threw for restaurant {RestaurantId}", restaurantId);
         }
     }
 }
