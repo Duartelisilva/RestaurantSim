@@ -1,6 +1,7 @@
 using MediatR;
 using Microsoft.Extensions.Logging;
 using RestaurantSim.Application.AutoManager;
+using RestaurantSim.Application.Commands.AdvanceCleaningProgress;
 using RestaurantSim.Application.Commands.AdvanceKitchen;
 using RestaurantSim.Application.Commands.AdvanceMood;
 using RestaurantSim.Application.Commands.AdvanceStaffShift;
@@ -13,13 +14,6 @@ using RestaurantSim.Domain.Abstractions;
 
 namespace RestaurantSim.Application.TickProcessing;
 
-// Dispatches the FULL locked intra-tick execution order (architecture doc
-// §2a), THEN runs AutoManager's own pass for that restaurant — "AutoManager
-// does not run inside the tick... runs as its own sequential pass immediately
-// after a tick finishes and releases the lock" (architecture doc §11). The
-// tick's own per-command locks are already released by the time each
-// TryDispatchAsync call returns, so calling IAutoManagerRunner right after
-// satisfies this ordering without any extra synchronization.
 public sealed class RestaurantTickProcessor
 {
     private readonly IRestaurantRepository _repository;
@@ -58,6 +52,7 @@ public sealed class RestaurantTickProcessor
 
             await TryDispatchAsync(new AdvanceKitchenCommand(restaurant.RestaurantId), restaurant.RestaurantId, cancellationToken);
             await TryDispatchAsync(new SpawnArrivalCommand(restaurant.RestaurantId), restaurant.RestaurantId, cancellationToken);
+            await TryDispatchAsync(new AdvanceCleaningProgressCommand(restaurant.RestaurantId), restaurant.RestaurantId, cancellationToken);
             await TryDispatchAsync(new AdvanceMoodCommand(restaurant.RestaurantId), restaurant.RestaurantId, cancellationToken);
             await TryDispatchAsync(new AdvanceStaffShiftCommand(restaurant.RestaurantId), restaurant.RestaurantId, cancellationToken);
             await TryDispatchAsync(new SpreadGroupMoodCommand(restaurant.RestaurantId), restaurant.RestaurantId, cancellationToken);
