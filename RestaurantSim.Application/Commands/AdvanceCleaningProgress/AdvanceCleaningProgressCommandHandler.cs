@@ -3,6 +3,7 @@ using RestaurantSim.Application.Common;
 using RestaurantSim.Domain;
 using RestaurantSim.Domain.Abstractions;
 using RestaurantSim.Domain.DomainEvents;
+using RestaurantSim.Domain.Floor;
 using RestaurantSim.Domain.Staff;
 using RestaurantSim.Domain.KitchenOps;
 
@@ -10,8 +11,6 @@ namespace RestaurantSim.Application.Commands.AdvanceCleaningProgress;
 
 public sealed class AdvanceCleaningProgressCommandHandler : IRequestHandler<AdvanceCleaningProgressCommand, Result>
 {
-    // No doc-cited example values exist for either (unlike Kitchen's, which
-    // had worked numbers) — first-pass proposed defaults.
     private const float DefaultTableCleaningBaseSeconds = 60f;
     private const float DefaultBathroomCleaningBaseSeconds = 180f;
 
@@ -68,6 +67,16 @@ public sealed class AdvanceCleaningProgressCommandHandler : IRequestHandler<Adva
                     table.CleaningProgress = 0f;
                     FreeBusser(busser);
                     completedTableEvents.Add(new TableCleaned(restaurant.RestaurantId, tableId, restaurant.SimulationTick));
+
+                    // Joke fatigue resets when the cluster fully clears
+                    // (NeedsCleaning -> Free), mechanics doc §11 — only once
+                    // EVERY member table is clean, not just this one.
+                    var parentCluster = restaurant.Floor.Clusters.FirstOrDefault(c => c.TableIds.Contains(tableId));
+                    if (parentCluster is not null &&
+                        parentCluster.DeriveState(restaurant.Floor.Tables, restaurant.CustomerService.Reservations, restaurant.SimulationTick) == TableClusterState.Free)
+                    {
+                        parentCluster.RecentJokeCount = 0;
+                    }
                 }
             }
             else if (busser.CurrentTaskType == TaskType.CleanBathroom && busser.CurrentTaskTargetId is int bathroomId)
@@ -100,7 +109,7 @@ public sealed class AdvanceCleaningProgressCommandHandler : IRequestHandler<Adva
         return Result.Success();
     }
 
-    private static void FreeBusser(RestaurantSim.Domain.Staff.StaffMember busser)
+    private static void FreeBusser(StaffMember busser)
     {
         busser.State = StaffState.Idle;
         busser.CurrentTaskType = null;

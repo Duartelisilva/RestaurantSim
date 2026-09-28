@@ -4,9 +4,11 @@ using RestaurantSim.Application.AutoManager;
 using RestaurantSim.Application.Commands.CleanBathroom;
 using RestaurantSim.Application.Commands.CleanTable;
 using RestaurantSim.Application.Commands.SeatGroup;
+using RestaurantSim.Application.Commands.TellJoke;
 using RestaurantSim.Application.Common;
 using RestaurantSim.AutoManager.Strategies.Seating;
 using RestaurantSim.AutoManager.Strategies.TaskPriority;
+using RestaurantSim.AutoManager.Strategies.WaiterAction;
 using RestaurantSim.Domain;
 using RestaurantSim.Domain.Abstractions;
 using RestaurantSim.Domain.Staff;
@@ -15,16 +17,17 @@ namespace RestaurantSim.AutoManager;
 
 public sealed class AutoManagerProcessor : IAutoManagerRunner
 {
-    // No doc-cited example values exist for either (mechanics doc §12's
-    // two-tier thresholds) — first-pass proposed defaults.
     private const float DefaultDirtyThreshold = 30f;
     private const float DefaultAlmostDirtyThreshold = 60f;
+    private const float DefaultAutoJokeCooldownSeconds = 60f;
+    private const float DefaultMoodGapThreshold = 20f;
 
     private readonly IRestaurantRepository _repository;
     private readonly IPresetRepository<RestaurantConfig> _presetRepository;
     private readonly ISender _sender;
     private readonly ISeatingStrategy _seatingStrategy;
     private readonly IStaffTaskPriorityStrategy _taskPriorityStrategy;
+    private readonly IWaiterActionStrategy _waiterActionStrategy;
     private readonly ILogger<AutoManagerProcessor> _logger;
 
     public AutoManagerProcessor(
@@ -33,6 +36,7 @@ public sealed class AutoManagerProcessor : IAutoManagerRunner
         ISender sender,
         ISeatingStrategy seatingStrategy,
         IStaffTaskPriorityStrategy taskPriorityStrategy,
+        IWaiterActionStrategy waiterActionStrategy,
         ILogger<AutoManagerProcessor> logger)
     {
         _repository = repository;
@@ -40,6 +44,7 @@ public sealed class AutoManagerProcessor : IAutoManagerRunner
         _sender = sender;
         _seatingStrategy = seatingStrategy;
         _taskPriorityStrategy = taskPriorityStrategy;
+        _waiterActionStrategy = waiterActionStrategy;
         _logger = logger;
     }
 
@@ -58,8 +63,10 @@ public sealed class AutoManagerProcessor : IAutoManagerRunner
             await RunTaskPriorityPassAsync(restaurantId, cancellationToken);
         }
 
-        // WaiterActions pass added once its underlying commands exist (see
-        // pending-doc-changes) — jokes/soothing/upsell/check-in aren't built.
+        if (restaurant.AutoManagerToggles.GetValueOrDefault(AutoManagerSystem.WaiterActions, true))
+        {
+            await RunWaiterActionsPassAsync(restaurantId, cancellationToken);
+        }
     }
 
     private async Task RunSeatingPassAsync(Guid restaurantId, CancellationToken cancellationToken)
@@ -91,19 +98,16 @@ public sealed class AutoManagerProcessor : IAutoManagerRunner
 
     private async Task RunTaskPriorityPassAsync(Guid restaurantId, CancellationToken cancellationToken)
     {
-        var config = await _presetRepository.GetAsync((await _repository.GetAsync(restaurantId, cancellationToken))?.ConfigId ?? "", cancellationToken);
+        var restaurantForConfig = await _repository.GetAsync(restaurantId, cancellationToken);
+        if (restaurantForConfig is null) return;
+
+        var config = await _presetRepository.GetAsync(restaurantForConfig.ConfigId, cancellationToken);
         if (config is null) return;
 
         var dirtyThreshold = config.DirtyThreshold ?? DefaultDirtyThreshold;
         var almostDirtyThreshold = config.AlmostDirtyThreshold ?? DefaultAlmostDirtyThreshold;
 
-        var restaurant = await _repository.GetAsync(restaurantId, cancellationToken);
-        if (restaurant is null) return;
-
-        // One decision per currently-idle Busser this pass — a Busy Busser is
-        // never asked (tier 1, "finish current task," is this omission, not
-        // a strategy branch).
-        var idleBusserIds = restaurant.StaffRoster.Staff
+        var idleBusserIds = restaurantForConfig.StaffRoster.Staff
             .Where(s => s.Role == StaffRole.Busser && s.State == StaffState.Idle)
             .Select(s => s.StaffId)
             .ToList();
@@ -114,7 +118,7 @@ public sealed class AutoManagerProcessor : IAutoManagerRunner
             if (current is null) return;
 
             var busser = current.StaffRoster.Staff.FirstOrDefault(s => s.StaffId == busserId);
-            if (busser is null || busser.State != StaffState.Idle) continue; // already picked up something this pass
+            if (busser is null || busser.State != StaffState.Idle) continue;
 
             var decision = _taskPriorityStrategy.DecideNextBusserTask(current, dirtyThreshold, almostDirtyThreshold);
             if (decision is null) continue;
@@ -133,6 +137,32 @@ public sealed class AutoManagerProcessor : IAutoManagerRunner
             {
                 _logger.LogError(ex, "AutoManager task-priority pass threw for restaurant {RestaurantId}", restaurantId);
             }
+        }
+    }
+
+    private async Task RunWaiterActionsPassAsync(Guid restaurantId, CancellationToken cancellationToken)
+    {
+        var restaurant = await _repository.GetAsync(restaurantId, cancellationToken);
+        if (restaurant is null) return;
+
+        var config = await _presetRepository.GetAsync(restaurant.ConfigId, cancellationToken);
+        if (config is null) return;
+
+        var cooldownTicks = (config.AutoJokeCooldownSeconds ?? DefaultAutoJokeCooldownSeconds) * config.TicksPerRealSecond;
+        var moodGapThreshold = config.MoodGapThreshold ?? DefaultMoodGapThreshold;
+
+        var decision = _waiterActionStrategy.DecideNextJoke(restaurant, cooldownTicks, moodGapThreshold);
+        if (decision is null) return;
+
+        try
+        {
+            var result = await _sender.Send(new TellJokeCommand(restaurantId, decision.Value.ClusterId, decision.Value.TargetCustomerId), cancellationToken);
+            if (result.IsFailure)
+                _logger.LogWarning("AutoManager waiter-action decision failed for restaurant {RestaurantId}: {Error}", restaurantId, result.Error);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "AutoManager waiter-action pass threw for restaurant {RestaurantId}", restaurantId);
         }
     }
 }

@@ -17,6 +17,8 @@ using RestaurantSim.Infrastructure.SignalR;
 
 using RestaurantSim.AutoManager;
 using RestaurantSim.AutoManager.Strategies.Seating;
+using RestaurantSim.AutoManager.Strategies.TaskPriority;
+using RestaurantSim.AutoManager.Strategies.WaiterAction;
 
 using MediatR;
 using FluentValidation;
@@ -58,6 +60,8 @@ builder.Services.AddSingleton<ISnapshotStore, InMemorySnapshotStore>();
 
 builder.Services.AddScoped<ISeatingStrategy, DefaultSeatingStrategy>();
 builder.Services.AddScoped<IAutoManagerRunner, AutoManagerProcessor>();
+builder.Services.AddScoped<IStaffTaskPriorityStrategy, DefaultStaffTaskPriorityStrategy>();
+builder.Services.AddScoped<IWaiterActionStrategy, DefaultWaiterActionStrategy>();
 
 var app = builder.Build();
 

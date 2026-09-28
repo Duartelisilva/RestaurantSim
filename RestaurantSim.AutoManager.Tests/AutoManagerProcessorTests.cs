@@ -5,9 +5,11 @@ using NSubstitute;
 using RestaurantSim.Application.Commands.CleanBathroom;
 using RestaurantSim.Application.Commands.CleanTable;
 using RestaurantSim.Application.Commands.SeatGroup;
+using RestaurantSim.Application.Commands.TellJoke;
 using RestaurantSim.Application.Common;
 using RestaurantSim.AutoManager.Strategies.Seating;
 using RestaurantSim.AutoManager.Strategies.TaskPriority;
+using RestaurantSim.AutoManager.Strategies.WaiterAction;
 using RestaurantSim.Domain;
 using RestaurantSim.Domain.Abstractions;
 using RestaurantSim.Domain.Staff;
@@ -22,13 +24,15 @@ public class AutoManagerProcessorTests
     private readonly ISender _sender = Substitute.For<ISender>();
     private readonly ISeatingStrategy _seatingStrategy = Substitute.For<ISeatingStrategy>();
     private readonly IStaffTaskPriorityStrategy _taskPriorityStrategy = Substitute.For<IStaffTaskPriorityStrategy>();
+    private readonly IWaiterActionStrategy _waiterActionStrategy = Substitute.For<IWaiterActionStrategy>();
     private readonly ILogger<AutoManagerProcessor> _logger = Substitute.For<ILogger<AutoManagerProcessor>>();
     private readonly AutoManagerProcessor _processor;
 
     public AutoManagerProcessorTests()
     {
-        _processor = new AutoManagerProcessor(_repository, _presetRepository, _sender, _seatingStrategy, _taskPriorityStrategy, _logger);
+        _processor = new AutoManagerProcessor(_repository, _presetRepository, _sender, _seatingStrategy, _taskPriorityStrategy, _waiterActionStrategy, _logger);
         SetupConfig();
+        _seatingStrategy.DecideNextSeating(Arg.Any<Restaurant>()).Returns((ValueTuple<int, int>?)null);
     }
 
     [Fact]
@@ -37,17 +41,9 @@ public class AutoManagerProcessorTests
         var restaurant = BuildRestaurant();
         _repository.GetAsync(restaurant.RestaurantId, Arg.Any<CancellationToken>()).Returns(restaurant);
         _sender.Send(Arg.Any<SeatGroupCommand>(), Arg.Any<CancellationToken>()).Returns(Result.Success());
-        var decisions = new Queue<(int GroupId, int ClusterId)?>(
-        [
-            (1, 10),
-            (2, 11),
-            null
-        ]);
+        _seatingStrategy.DecideNextSeating(restaurant).Returns((1, 10),(2, 11),(ValueTuple<int, int>?)null);
 
-        _seatingStrategy
-            .DecideNextSeating(restaurant)
-            .Returns(_ => decisions.Dequeue());
-
+        
         await _processor.RunPassAsync(restaurant.RestaurantId, CancellationToken.None);
 
         await _sender.Received(1).Send(Arg.Is<SeatGroupCommand>(c => c.GroupId == 1 && c.ClusterId == 10), Arg.Any<CancellationToken>());
@@ -55,61 +51,40 @@ public class AutoManagerProcessorTests
     }
 
     [Fact]
-    public async Task RunPassAsync_SkipsSeatingEntirely_WhenSeatingToggleIsOff()
+    public async Task RunPassAsync_DispatchesTellJokeCommand_WhenWaiterActionStrategyDecides()
     {
         var restaurant = BuildRestaurant();
-        restaurant.AutoManagerToggles[AutoManagerSystem.Seating] = false;
         _repository.GetAsync(restaurant.RestaurantId, Arg.Any<CancellationToken>()).Returns(restaurant);
+        _waiterActionStrategy.DecideNextJoke(Arg.Any<Restaurant>(), Arg.Any<float>(), Arg.Any<float>()).Returns((10, (int?)5));
+        _sender.Send(Arg.Any<TellJokeCommand>(), Arg.Any<CancellationToken>()).Returns(Result.Success());
 
         await _processor.RunPassAsync(restaurant.RestaurantId, CancellationToken.None);
 
-        _seatingStrategy.DidNotReceive().DecideNextSeating(Arg.Any<Restaurant>());
+        await _sender.Received(1).Send(Arg.Is<TellJokeCommand>(c => c.ClusterId == 10 && c.TargetCustomerId == 5), Arg.Any<CancellationToken>());
     }
 
     [Fact]
-    public async Task RunPassAsync_DispatchesCleanTableCommand_ForIdleBusser_WhenStrategyPicksTable()
+    public async Task RunPassAsync_SkipsWaiterActionsEntirely_WhenToggleIsOff()
     {
         var restaurant = BuildRestaurant();
-        var busser = AddIdleBusser(restaurant);
+        restaurant.AutoManagerToggles[AutoManagerSystem.WaiterActions] = false;
         _repository.GetAsync(restaurant.RestaurantId, Arg.Any<CancellationToken>()).Returns(restaurant);
-        _seatingStrategy.DecideNextSeating(Arg.Any<Restaurant>()).Returns((ValueTuple<int, int>?)null);
-        _taskPriorityStrategy.DecideNextBusserTask(Arg.Any<Restaurant>(), Arg.Any<float>(), Arg.Any<float>())
-            .Returns((TaskType.CleanTable, 5), (ValueTuple<TaskType, int>?)null);
-        _sender.Send(Arg.Any<CleanTableCommand>(), Arg.Any<CancellationToken>()).Returns(Result.Success());
 
         await _processor.RunPassAsync(restaurant.RestaurantId, CancellationToken.None);
 
-        await _sender.Received(1).Send(Arg.Is<CleanTableCommand>(c => c.BusserStaffId == busser.StaffId && c.TableId == 5), Arg.Any<CancellationToken>());
+        _waiterActionStrategy.DidNotReceive().DecideNextJoke(Arg.Any<Restaurant>(), Arg.Any<float>(), Arg.Any<float>());
     }
 
     [Fact]
-    public async Task RunPassAsync_DispatchesBussersCleanBathroomCommand_WhenStrategyPicksBathroom()
+    public async Task RunPassAsync_DoesNotDispatchTellJoke_WhenStrategyReturnsNull()
     {
         var restaurant = BuildRestaurant();
-        var busser = AddIdleBusser(restaurant);
         _repository.GetAsync(restaurant.RestaurantId, Arg.Any<CancellationToken>()).Returns(restaurant);
-        _seatingStrategy.DecideNextSeating(Arg.Any<Restaurant>()).Returns((ValueTuple<int, int>?)null);
-        _taskPriorityStrategy.DecideNextBusserTask(Arg.Any<Restaurant>(), Arg.Any<float>(), Arg.Any<float>())
-            .Returns((TaskType.CleanBathroom, 3), (ValueTuple<TaskType, int>?)null);
-        _sender.Send(Arg.Any<BussersCleanBathroomCommand>(), Arg.Any<CancellationToken>()).Returns(Result.Success());
+        _waiterActionStrategy.DecideNextJoke(Arg.Any<Restaurant>(), Arg.Any<float>(), Arg.Any<float>()).Returns((ValueTuple<int, int?>?)null);
 
         await _processor.RunPassAsync(restaurant.RestaurantId, CancellationToken.None);
 
-        await _sender.Received(1).Send(Arg.Is<BussersCleanBathroomCommand>(c => c.BusserStaffId == busser.StaffId && c.BathroomId == 3), Arg.Any<CancellationToken>());
-    }
-
-    [Fact]
-    public async Task RunPassAsync_SkipsTaskPriorityEntirely_WhenToggleIsOff()
-    {
-        var restaurant = BuildRestaurant();
-        restaurant.AutoManagerToggles[AutoManagerSystem.TaskPriority] = false;
-        AddIdleBusser(restaurant);
-        _repository.GetAsync(restaurant.RestaurantId, Arg.Any<CancellationToken>()).Returns(restaurant);
-        _seatingStrategy.DecideNextSeating(Arg.Any<Restaurant>()).Returns((ValueTuple<int, int>?)null);
-
-        await _processor.RunPassAsync(restaurant.RestaurantId, CancellationToken.None);
-
-        _taskPriorityStrategy.DidNotReceive().DecideNextBusserTask(Arg.Any<Restaurant>(), Arg.Any<float>(), Arg.Any<float>());
+        await _sender.DidNotReceive().Send(Arg.Any<TellJokeCommand>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -136,17 +111,6 @@ public class AutoManagerProcessorTests
             MaxQueueLength = 12, BaseArrivalIntervalSeconds = 120f
         };
         _presetRepository.GetAsync("default_diner", Arg.Any<CancellationToken>()).Returns(config);
-    }
-
-    private static StaffMember AddIdleBusser(Restaurant restaurant)
-    {
-        var busser = new StaffMember
-        {
-            StaffId = 1, Name = "Busser A", Role = StaffRole.Busser, State = StaffState.Idle,
-            Stats = new StaffStats(), AssignedMealPeriods = new[] { "lunch" }
-        };
-        restaurant.StaffRoster.Staff.Add(busser);
-        return busser;
     }
 
     private static Restaurant BuildRestaurant() => new()
