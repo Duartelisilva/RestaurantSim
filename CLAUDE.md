@@ -43,7 +43,8 @@ Separate `.csproj` per layer, referencing **inward only**:
 
 ```
 RestaurantSim.Domain          (no references — pure logic, entities, rules)
-RestaurantSim.Application     → Domain
+RestaurantSim.Application     → Domain, Contracts
+RestaurantSim.Contracts       (no references — wire DTOs shared with the client)
 RestaurantSim.Modules.*       → Domain, Application (public contracts only)
 RestaurantSim.AutoManager     → Domain, Application (public contracts only)
 RestaurantSim.Infrastructure  → Application, Domain

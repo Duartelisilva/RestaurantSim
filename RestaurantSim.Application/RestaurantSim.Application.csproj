@@ -2,6 +2,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\RestaurantSim.Domain\RestaurantSim.Domain.csproj" />
+    <ProjectReference Include="..\RestaurantSim.Contracts\RestaurantSim.Contracts.csproj" />
   </ItemGroup>
 
   <ItemGroup>
