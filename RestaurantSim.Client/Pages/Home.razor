@@ -1,7 +1,7 @@
 @page "/"
-@using RestaurantSim.Client.Time
 @implements IDisposable
 @inject IEngineClient Engine
+@inject RestaurantStore Store
 
 <h1>RestaurantSim</h1>
 
@@ -9,30 +9,44 @@
 
 <button @onclick="StartAsync" disabled="@_started">Connect &amp; start default_diner</button>
 
-@if (_snapshot is not null && _clock is not null)
+@if (Store.Snapshot is { } snapshot && _clock is not null)
 {
-    <ul>
-        <li>Restaurant: @_snapshot.RestaurantId</li>
-        <li>In-game time: @_clock.TimeOfDay(DateTimeOffset.UtcNow).ToString("HH:mm") (day @_snapshot.CurrentDayNumber at join)</li>
-        <li>Snapshot tick: @_snapshot.SimulationTick (@_snapshot.MinutesPerTick min/tick, @_snapshot.TicksPerRealSecond tick/s)</li>
-        <li>Tables: @_snapshot.Floor.Tables.Count, clusters: @_snapshot.Floor.Clusters.Count</li>
-        <li>Staff: @_snapshot.Staff.Count</li>
-        <li>Queue: @_snapshot.Queue.Count, seated groups: @_snapshot.ActiveGroups.Count (as at join)</li>
-    </ul>
-}
+    <p>In-game time: @_clock.TimeOfDay(DateTimeOffset.UtcNow).ToString("HH:mm")</p>
 
-<h3>Live events</h3>
-<ul>
-    @foreach (var line in _log)
-    {
-        <li>@line</li>
-    }
-</ul>
+    <div class="floor-layout">
+        <FloorView Snapshot="snapshot" />
+
+        <div class="side">
+            <h3>Queue (@snapshot.Queue.Count)</h3>
+            <ul>
+                @foreach (var g in snapshot.Queue)
+                {
+                    <li>Group @g.GroupId — party of @g.PartySize</li>
+                }
+            </ul>
+
+            <h3>Staff (as at join)</h3>
+            <ul>
+                @foreach (var st in snapshot.Staff)
+                {
+                    <li>@st.Name — @st.Role, @st.State</li>
+                }
+            </ul>
+
+            <h3>Live events</h3>
+            <ul>
+                @foreach (var line in _log)
+                {
+                    <li>@line</li>
+                }
+            </ul>
+        </div>
+    </div>
+}
 
 @code {
     private string _status = "Not connected";
     private bool _started;
-    private RestaurantSnapshotDto? _snapshot;
     private GameClock? _clock;
     private System.Threading.Timer? _timer;
     private readonly List<string> _log = new();
@@ -40,6 +54,7 @@
     protected override void OnInitialized()
     {
         Engine.GroupSeated += OnGroupSeated;
+        Store.Changed += OnStoreChanged;
     }
 
     private async Task StartAsync()
@@ -62,11 +77,11 @@
             var joined = await Engine.JoinRestaurantAsync(created.Value);
             if (joined is { Succeeded: true, Value: { } snapshot })
             {
-                _snapshot = snapshot;
                 _clock = new GameClock(
                     snapshot.SimulationTick, snapshot.MinutesPerTick, snapshot.TicksPerRealSecond, DateTimeOffset.UtcNow);
                 _timer = new System.Threading.Timer(
                     _ => InvokeAsync(StateHasChanged), null, TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(1));
+                Store.Load(snapshot);
                 _status = "Joined";
             }
             else
@@ -84,17 +99,19 @@
 
     private void OnGroupSeated(GroupSeatedDto dto)
     {
-        // Drop only strictly older events; equal ticks are applied (idempotent).
-        if (_snapshot is null || dto.Tick < _snapshot.SimulationTick)
-            return;
+        if (Store.Apply(dto))
+            _log.Add($"[tick {dto.Tick}] group {dto.GroupId} seated at cluster {dto.ClusterId}");
+    }
 
-        _log.Add($"[tick {dto.Tick}] group {dto.GroupId} seated at cluster {dto.ClusterId}");
+    private void OnStoreChanged()
+    {
         InvokeAsync(StateHasChanged);
     }
 
     public void Dispose()
     {
         Engine.GroupSeated -= OnGroupSeated;
+        Store.Changed -= OnStoreChanged;
         _timer?.Dispose();
     }
 }

@@ -1,0 +1,67 @@
+@using RestaurantSim.Contracts.Snapshot
+
+@if (Snapshot is { } s)
+{
+    var (cols, rows) = Extents(s.Floor);
+
+    <svg class="floor" viewBox="0 0 @(cols * Cell) @(rows * Cell)" width="@(cols * Cell)" height="@(rows * Cell)">
+        @foreach (var b in s.Floor.Bathrooms)
+        {
+            @Box("bathroom", b.Position, b.Size, $"WC {b.Gender[0]}")
+        }
+        @foreach (var st in s.Floor.Stations)
+        {
+            @Box("station", st.Position, st.Size, st.StationTypeId)
+        }
+        @foreach (var h in s.Floor.HeatLamps)
+        {
+            @Box("heatlamp", h.Position, h.Size, "lamp")
+        }
+        @foreach (var f in s.Floor.Freezers)
+        {
+            @Box("freezer", f.Position, f.Size, "freezer")
+        }
+        @foreach (var t in s.Floor.Tables)
+        {
+            @Box("table state-" + StateOf(s.Floor, t).ToLowerInvariant(), t.Position, t.Size, $"T{t.TableId}")
+        }
+    </svg>
+}
+
+@code {
+    private const int Cell = 40;
+
+    [Parameter]
+    public RestaurantSnapshotDto? Snapshot { get; set; }
+
+    // Assumes Position is the top-left cell of the hitbox, Y growing downwards.
+    private RenderFragment Box(string css, GridPointDto pos, GridSizeDto size, string label) => @<g>
+        <rect class="@css" x="@(pos.X * Cell)" y="@(pos.Y * Cell)" width="@(size.Width * Cell)" height="@(size.Height * Cell)" />
+        <text x="@(pos.X * Cell + 4)" y="@(pos.Y * Cell + 14)">@label</text>
+    </g>;
+
+    private static string StateOf(FloorDto floor, TableDto table)
+    {
+        return floor.Clusters.FirstOrDefault(c => c.ClusterId == table.ClusterId)?.State ?? "Free";
+    }
+
+    private static (int Cols, int Rows) Extents(FloorDto floor)
+    {
+        var cols = 1;
+        var rows = 1;
+
+        void Grow(GridPointDto p, GridSizeDto s)
+        {
+            cols = Math.Max(cols, p.X + s.Width);
+            rows = Math.Max(rows, p.Y + s.Height);
+        }
+
+        foreach (var t in floor.Tables) Grow(t.Position, t.Size);
+        foreach (var s in floor.Stations) Grow(s.Position, s.Size);
+        foreach (var h in floor.HeatLamps) Grow(h.Position, h.Size);
+        foreach (var f in floor.Freezers) Grow(f.Position, f.Size);
+        foreach (var b in floor.Bathrooms) Grow(b.Position, b.Size);
+
+        return (cols, rows);
+    }
+}
