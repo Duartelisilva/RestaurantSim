@@ -41,4 +41,24 @@ public static class MealPeriodCalculator
 
         return (startMinutes, endMinutes);
     }
+
+    // Earliest StartTime among the active periods, in minutes into the day
+    // (mechanics doc §15: Opening). Requires at least one period.
+    public static int OpeningMinutes(IReadOnlyList<MealPeriodDefinition> activePeriods)
+    {
+        return activePeriods.Select(PeriodWindow).Min(w => w.StartMinutes);
+    }
+
+    // The tick a brand-new restaurant starts at: leadMinutes of in-game time before
+    // Opening, clamped to the start of day (so the lead is "at most" leadMinutes).
+    // A negative lead is treated as 0; no active periods means tick 0.
+    public static long InitialTick(
+        IReadOnlyList<MealPeriodDefinition> activePeriods, int minutesPerTick, int leadMinutes)
+    {
+        if (activePeriods.Count == 0)
+            return 0;
+
+        var startMinutes = Math.Max(0, OpeningMinutes(activePeriods) - Math.Max(0, leadMinutes));
+        return (long)Math.Round(startMinutes / (double)minutesPerTick);
+    }
 }

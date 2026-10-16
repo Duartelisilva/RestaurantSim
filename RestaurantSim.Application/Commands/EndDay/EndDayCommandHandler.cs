@@ -98,7 +98,7 @@ public sealed class EndDayCommandHandler : IRequestHandler<EndDayCommand, Result
     }
 
     private static int ComputeOpeningMinutes(RestaurantConfig config) =>
-        config.ActiveMealPeriods.Select(MealPeriodCalculator.PeriodWindow).Min(w => w.StartMinutes);
+        MealPeriodCalculator.OpeningMinutes(config.ActiveMealPeriods);
 
     private static int ComputeClosingMinutes(RestaurantConfig config) =>
         config.ActiveMealPeriods.Select(MealPeriodCalculator.PeriodWindow).Max(w => w.EndMinutes);

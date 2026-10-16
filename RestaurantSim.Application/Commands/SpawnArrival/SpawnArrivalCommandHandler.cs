@@ -74,7 +74,7 @@ public sealed class SpawnArrivalCommandHandler : IRequestHandler<SpawnArrivalCom
             restaurant.SimulationTick + ComputeIntervalTicks(config, restaurant, activePeriod);
 
         await _repository.SaveAsync(restaurant, cancellationToken);
-        await _publisher.Publish(new GroupArrived(restaurant.RestaurantId, group.GroupId, restaurant.SimulationTick), cancellationToken);
+        await _publisher.Publish(new GroupArrived(restaurant.RestaurantId, group.GroupId, group.PartySize, restaurant.SimulationTick), cancellationToken);
 
         return Result.Success();
     }

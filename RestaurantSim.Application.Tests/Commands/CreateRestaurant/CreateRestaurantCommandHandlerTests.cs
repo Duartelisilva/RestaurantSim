@@ -90,7 +90,7 @@ public class CreateRestaurantCommandHandlerTests
 
         savedRestaurant!.Cash.Should().Be(5000m);
         savedRestaurant.Reputation.Should().Be(20f);
-        savedRestaurant.SimulationTick.Should().Be(0);
+        savedRestaurant.SimulationTick.Should().Be(690);
     }
 
     [Fact]

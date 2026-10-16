@@ -52,8 +52,11 @@ public class SpawnArrivalCommandHandlerTests
         result.IsSuccess.Should().BeTrue();
         restaurant.CustomerService.Queue.Should().HaveCount(1);
         restaurant.CustomerService.NextArrivalTick.Should().BeGreaterThan(restaurant.SimulationTick);
+        var queued = restaurant.CustomerService.Queue.Single();
         await _publisher.Received(1).Publish(
-            Arg.Any<RestaurantSim.Domain.DomainEvents.GroupArrived>(), Arg.Any<CancellationToken>());
+            Arg.Is<RestaurantSim.Domain.DomainEvents.GroupArrived>(e =>
+                e.GroupId == queued.GroupId && e.PartySize == queued.PartySize),
+            Arg.Any<CancellationToken>());
     }
 
     [Fact]

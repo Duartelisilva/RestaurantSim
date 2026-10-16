@@ -2,6 +2,7 @@ using MediatR;
 using RestaurantSim.Application.Common;
 using RestaurantSim.Domain;
 using RestaurantSim.Domain.Abstractions;
+using RestaurantSim.Domain.Scheduling;
 using RestaurantSim.Domain.Staff;
 using RestaurantSim.Domain.Statistics;
 
@@ -12,7 +13,7 @@ public sealed class CreateRestaurantCommandHandler : IRequestHandler<CreateResta
     private readonly IPresetRepository<RestaurantConfig> _presetRepository;
     private readonly ILayoutRepository _layoutRepository;
     private readonly IRestaurantRepository _repository;
-
+    private const int DefaultPreOpeningLeadMinutes = 30;
     public CreateRestaurantCommandHandler(
         IPresetRepository<RestaurantConfig> presetRepository,
         ILayoutRepository layoutRepository,
@@ -37,7 +38,10 @@ public sealed class CreateRestaurantCommandHandler : IRequestHandler<CreateResta
         {
             RestaurantId = Guid.NewGuid(),
             ConfigId = config.ConfigId,
-            SimulationTick = 0,
+            SimulationTick = MealPeriodCalculator.InitialTick(
+                config.ActiveMealPeriods,
+                config.MinutesPerTick,
+                config.PreOpeningLeadMinutes ?? DefaultPreOpeningLeadMinutes),
             Cash = config.StartingCash,
             Reputation = config.ReputationStart,
             Floor = new FloorState

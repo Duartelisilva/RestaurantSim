@@ -30,6 +30,7 @@ public static class DefaultDinerConfigSeed
         ReputationStart = 20f,
         PatienceDecayBaseline = null, // open, pending playtesting (presets doc)
         ReinformMoodPenalty = null, // open, pending playtesting
+        PreOpeningLeadMinutes = 30,
         QueueWaitMoodDecayRate = -0.4f,
         CourseWaitMoodDecayRate = -0.3f,
         NaturalMoodRecoveryRate = 0.5f,

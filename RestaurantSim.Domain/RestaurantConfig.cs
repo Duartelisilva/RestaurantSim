@@ -85,4 +85,8 @@ public sealed class RestaurantConfig
     // applied to a group's still-waiting members when their ticket flips to
     // re-inform/async mode (mechanics doc §10).
     public float? ReinformMoodPenalty { get; init; }
+
+    // In-game minutes before Opening that a brand-new restaurant starts at (at most;
+    // clamped to the start of day). Nullable, code default 30 if unset.
+    public int? PreOpeningLeadMinutes { get; init; }
 }
