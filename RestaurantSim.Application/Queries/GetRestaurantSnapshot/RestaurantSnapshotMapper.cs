@@ -6,7 +6,7 @@ namespace RestaurantSim.Application.Queries.GetRestaurantSnapshot;
 
 internal static class RestaurantSnapshotMapper
 {
-    public static RestaurantSnapshotDto Map(Restaurant r)
+    public static RestaurantSnapshotDto Map(Restaurant r, RestaurantConfig config)
     {
         var floor = r.Floor;
         var service = r.CustomerService;
@@ -14,6 +14,8 @@ internal static class RestaurantSnapshotMapper
         return new RestaurantSnapshotDto(
             r.RestaurantId,
             r.SimulationTick,
+            config.MinutesPerTick,
+            config.TicksPerRealSecond,
             r.CurrentDayNumber,
             r.Cash,
             r.Reputation,

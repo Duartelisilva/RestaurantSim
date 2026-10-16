@@ -61,9 +61,13 @@ public sealed record ActiveGroupDto(
     string LifecycleState,
     string CoursePhase);
 
+// MinutesPerTick / TicksPerRealSecond let the client extrapolate the in-game
+// clock between events — ticks themselves are never pushed (architecture doc §3).
 public sealed record RestaurantSnapshotDto(
     Guid RestaurantId,
     long SimulationTick,
+    int MinutesPerTick,
+    int TicksPerRealSecond,
     int CurrentDayNumber,
     decimal Cash,
     float Reputation,

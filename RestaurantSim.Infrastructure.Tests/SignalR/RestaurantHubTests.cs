@@ -103,7 +103,7 @@ public sealed class RestaurantHubTests
     }
 
     private static RestaurantSnapshotDto EmptySnapshot(Guid id) => new(
-        id, 0, 0, 0m, 0f,
+        id, 0, 1, 1, 0, 0m, 0f,
         new FloorDto([], [], [], [], [], []),
         [], [], []);
 }
