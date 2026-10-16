@@ -30,17 +30,17 @@ public static class DefaultDinerKitchenLayoutSeed
         var byId = stationTypes.ToDictionary(t => t.StationTypeId);
         return new List<KitchenStation>
         {
-            new() { StationId = 1, Position = new GridPosition(0, 0), Hitbox = new GridBounds(1, 1), StationType = byId["grill"] },
-            new() { StationId = 2, Position = new GridPosition(1, 0), Hitbox = new GridBounds(1, 1), StationType = byId["fryer"] },
-            new() { StationId = 3, Position = new GridPosition(2, 0), Hitbox = new GridBounds(1, 1), StationType = byId["cold_prep"] },
-            new() { StationId = 4, Position = new GridPosition(3, 0), Hitbox = new GridBounds(1, 1), StationType = byId["dessert_station"] }
+            new() { StationId = 1, Position = new GridPosition(0, 4), Hitbox = new GridBounds(1, 1), StationType = byId["grill"] },
+            new() { StationId = 2, Position = new GridPosition(1, 4), Hitbox = new GridBounds(1, 1), StationType = byId["fryer"] },
+            new() { StationId = 3, Position = new GridPosition(2, 4), Hitbox = new GridBounds(1, 1), StationType = byId["cold_prep"] },
+            new() { StationId = 4, Position = new GridPosition(3, 4), Hitbox = new GridBounds(1, 1), StationType = byId["dessert_station"] }
         };
     }
 
     public static HeatLamp CreateHeatLamp() => new()
     {
         HeatLampId = 1,
-        Position = new GridPosition(4, 0),
+        Position = new GridPosition(1, 4),
         Hitbox = new GridBounds(1, 1),
         SlotCount = 3, // presets.md — explicitly given
         QualityDecayRatePerTick = 1.0f // NOT given in presets.md either — first-pass proposed default

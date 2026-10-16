@@ -52,8 +52,8 @@ public static class DefaultDinerLayoutSeed
         var heatLamp = DefaultDinerKitchenLayoutSeed.CreateHeatLamp();
 
         // Placed adjacent to cold_prep (presets.md) — cold_prep is StationId 3
-        // at (2,0) in the kitchen layout seed.
-        var freezer = new Freezer { FreezerId = 1, Position = new GridPosition(2, 1), Hitbox = new GridBounds(1, 1) };
+        // at (2,4) in the kitchen layout seed.
+        var freezer = new Freezer { FreezerId = 1, Position = new GridPosition(2, 5), Hitbox = new GridBounds(1, 1) };
 
         var bathrooms = new List<Bathroom>
         {
