@@ -30,7 +30,9 @@ public sealed class RestaurantHub : Hub
 
     // Joins the group BEFORE fetching the snapshot: any event raised in between
     // is delivered (and may already be reflected in the snapshot) rather than
-    // lost. The client discards events whose tick is <= the snapshot's tick.
+    // lost. The client drops events with a tick strictly BELOW the snapshot's
+    // tick and applies equal-tick events idempotently — several commands run
+    // within one tick, so an equal tick may fall before or after the snapshot.
     public async Task<HubResult<RestaurantSnapshotDto>> JoinRestaurantAsync(Guid restaurantId)
     {
         var groupName = restaurantId.ToString();

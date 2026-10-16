@@ -45,6 +45,7 @@ Separate `.csproj` per layer, referencing **inward only**:
 RestaurantSim.Domain          (no references — pure logic, entities, rules)
 RestaurantSim.Application     → Domain, Contracts
 RestaurantSim.Contracts       (no references — wire DTOs shared with the client)
+RestaurantSim.Client          → Contracts (Blazor WASM; SignalR only)
 RestaurantSim.Modules.*       → Domain, Application (public contracts only)
 RestaurantSim.AutoManager     → Domain, Application (public contracts only)
 RestaurantSim.Infrastructure  → Application, Domain

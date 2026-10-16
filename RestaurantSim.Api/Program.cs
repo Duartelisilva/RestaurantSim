@@ -37,6 +37,14 @@ builder.Services.AddValidatorsFromAssembly(typeof(SeatGroupCommandValidator).Ass
 builder.Services.AddTransient(typeof(IPipelineBehavior<,>), typeof(RestaurantLockBehavior<,>));
 builder.Services.AddTransient(typeof(IPipelineBehavior<,>), typeof(ValidationBehavior<,>));
 builder.Services.AddSignalR();
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("Client", policy => policy
+        .WithOrigins("https://localhost:7280", "http://localhost:5280")
+        .AllowAnyHeader()
+        .AllowAnyMethod()
+        .AllowCredentials());
+});
 builder.Services.AddSingleton<IRandomProvider, SystemRandomProvider>();
 builder.Services.AddSingleton<ArrivalGroupGenerator>();
 
@@ -64,6 +72,8 @@ builder.Services.AddScoped<IStaffTaskPriorityStrategy, DefaultStaffTaskPriorityS
 builder.Services.AddScoped<IWaiterActionStrategy, DefaultWaiterActionStrategy>();
 
 var app = builder.Build();
+
+app.UseCors("Client");
 
 app.MapHub<RestaurantHub>("/hubs/restaurant");
 

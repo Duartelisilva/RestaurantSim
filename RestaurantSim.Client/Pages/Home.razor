@@ -1,0 +1,91 @@
+@page "/"
+@implements IDisposable
+@inject IEngineClient Engine
+
+<h1>RestaurantSim</h1>
+
+<p>Status: @_status</p>
+
+<button @onclick="StartAsync" disabled="@_started">Connect &amp; start default_diner</button>
+
+@if (_snapshot is not null)
+{
+    <ul>
+        <li>Restaurant: @_snapshot.RestaurantId</li>
+        <li>Tick: @_snapshot.SimulationTick (day @_snapshot.CurrentDayNumber)</li>
+        <li>Tables: @_snapshot.Floor.Tables.Count, clusters: @_snapshot.Floor.Clusters.Count</li>
+        <li>Staff: @_snapshot.Staff.Count</li>
+        <li>Queue: @_snapshot.Queue.Count, seated groups: @_snapshot.ActiveGroups.Count</li>
+    </ul>
+}
+
+<h3>Live events</h3>
+<ul>
+    @foreach (var line in _log)
+    {
+        <li>@line</li>
+    }
+</ul>
+
+@code {
+    private string _status = "Not connected";
+    private bool _started;
+    private RestaurantSnapshotDto? _snapshot;
+    private readonly List<string> _log = new();
+
+    protected override void OnInitialized()
+    {
+        Engine.GroupSeated += OnGroupSeated;
+    }
+
+    private async Task StartAsync()
+    {
+        _started = true;
+
+        try
+        {
+            await Engine.ConnectAsync();
+            _status = "Connected, creating restaurant...";
+
+            var created = await Engine.CreateRestaurantAsync("default_diner");
+            if (!created.Succeeded)
+            {
+                _status = $"Create failed: {created.Error}";
+                _started = false;
+                return;
+            }
+
+            var joined = await Engine.JoinRestaurantAsync(created.Value);
+            if (joined is { Succeeded: true, Value: { } snapshot })
+            {
+                _snapshot = snapshot;
+                _status = "Joined";
+            }
+            else
+            {
+                _status = $"Join failed: {joined.Error}";
+                _started = false;
+            }
+        }
+        catch (Exception ex)
+        {
+            _status = $"Error: {ex.Message}";
+            _started = false;
+        }
+    }
+
+    private void OnGroupSeated(GroupSeatedDto dto)
+    {
+        // Drop only strictly older events; equal ticks are applied (idempotent).
+        if (_snapshot is null || dto.Tick < _snapshot.SimulationTick)
+            return;
+
+        _log.Add($"[tick {dto.Tick}] group {dto.GroupId} seated at cluster {dto.ClusterId}");
+        InvokeAsync(StateHasChanged);
+    }
+
+    public void Dispose()
+    {
+        Engine.GroupSeated -= OnGroupSeated;
+    }
+}
