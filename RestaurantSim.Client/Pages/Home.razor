@@ -53,7 +53,11 @@
 
     protected override void OnInitialized()
     {
+        Engine.GroupArrived += OnGroupArrived;
+        Engine.GroupAbandonedQueue += OnGroupAbandonedQueue;
         Engine.GroupSeated += OnGroupSeated;
+        Engine.GroupLeft += OnGroupLeft;
+        Engine.TableCleaned += OnTableCleaned;
         Store.Changed += OnStoreChanged;
     }
 
@@ -97,10 +101,34 @@
         }
     }
 
+    private void OnGroupArrived(GroupArrivedDto dto)
+    {
+        if (Store.Apply(dto))
+            _log.Add($"[tick {dto.Tick}] group {dto.GroupId} arrived (party of {dto.PartySize})");
+    }
+
+    private void OnGroupAbandonedQueue(GroupAbandonedQueueDto dto)
+    {
+        if (Store.Apply(dto))
+            _log.Add($"[tick {dto.Tick}] group {dto.GroupId} left the queue");
+    }
+
     private void OnGroupSeated(GroupSeatedDto dto)
     {
         if (Store.Apply(dto))
             _log.Add($"[tick {dto.Tick}] group {dto.GroupId} seated at cluster {dto.ClusterId}");
+    }
+
+    private void OnGroupLeft(GroupLeftDto dto)
+    {
+        if (Store.Apply(dto))
+            _log.Add($"[tick {dto.Tick}] group {dto.GroupId} left cluster {dto.ClusterId}");
+    }
+
+    private void OnTableCleaned(TableCleanedDto dto)
+    {
+        if (Store.Apply(dto))
+            _log.Add($"[tick {dto.Tick}] table {dto.TableId} cleaned");
     }
 
     private void OnStoreChanged()
@@ -110,7 +138,11 @@
 
     public void Dispose()
     {
+        Engine.GroupArrived -= OnGroupArrived;
+        Engine.GroupAbandonedQueue -= OnGroupAbandonedQueue;
         Engine.GroupSeated -= OnGroupSeated;
+        Engine.GroupLeft -= OnGroupLeft;
+        Engine.TableCleaned -= OnTableCleaned;
         Store.Changed -= OnStoreChanged;
         _timer?.Dispose();
     }

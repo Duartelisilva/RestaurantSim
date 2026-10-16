@@ -10,7 +10,11 @@ public interface IEngineClient : IAsyncDisposable
 {
     bool IsConnected { get; }
 
+    event Action<GroupArrivedDto>? GroupArrived;
+    event Action<GroupAbandonedQueueDto>? GroupAbandonedQueue;
     event Action<GroupSeatedDto>? GroupSeated;
+    event Action<GroupLeftDto>? GroupLeft;
+    event Action<TableCleanedDto>? TableCleaned;
 
     Task ConnectAsync(CancellationToken cancellationToken = default);
 

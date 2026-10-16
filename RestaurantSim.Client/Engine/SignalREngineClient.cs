@@ -16,12 +16,20 @@ public sealed class SignalREngineClient : IEngineClient
             .WithAutomaticReconnect()
             .Build();
 
+        _connection.On<GroupArrivedDto>(ClientEventNames.GroupArrived, dto => GroupArrived?.Invoke(dto));
+        _connection.On<GroupAbandonedQueueDto>(ClientEventNames.GroupAbandonedQueue, dto => GroupAbandonedQueue?.Invoke(dto));
         _connection.On<GroupSeatedDto>(ClientEventNames.GroupSeated, dto => GroupSeated?.Invoke(dto));
+        _connection.On<GroupLeftDto>(ClientEventNames.GroupLeft, dto => GroupLeft?.Invoke(dto));
+        _connection.On<TableCleanedDto>(ClientEventNames.TableCleaned, dto => TableCleaned?.Invoke(dto));
     }
 
     public bool IsConnected => _connection.State == HubConnectionState.Connected;
 
+    public event Action<GroupArrivedDto>? GroupArrived;
+    public event Action<GroupAbandonedQueueDto>? GroupAbandonedQueue;
     public event Action<GroupSeatedDto>? GroupSeated;
+    public event Action<GroupLeftDto>? GroupLeft;
+    public event Action<TableCleanedDto>? TableCleaned;
 
     public Task ConnectAsync(CancellationToken cancellationToken = default)
     {

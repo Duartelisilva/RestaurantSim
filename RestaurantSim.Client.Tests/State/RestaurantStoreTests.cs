@@ -30,6 +30,43 @@ public class RestaurantStoreTests
         _store.Snapshot.Should().BeNull();
     }
 
+    // --- GroupArrived / GroupAbandonedQueue ---
+
+    [Fact]
+    public void Apply_GroupArrived_AddsToQueue()
+    {
+        _store.Load(BuildSnapshot());
+
+        _store.Apply(new GroupArrivedDto(7, 3, 11)).Should().BeTrue();
+
+        var queued = _store.Snapshot!.Queue.Should().ContainSingle().Subject;
+        queued.GroupId.Should().Be(7);
+        queued.PartySize.Should().Be(3);
+    }
+
+    [Fact]
+    public void Apply_GroupArrived_IsIdempotent_AndIgnoresGroupsAlreadyKnown()
+    {
+        _store.Load(BuildSnapshot(queue: [new QueuedGroupDto(7, 3)]));
+
+        _store.Apply(new GroupArrivedDto(7, 3, 11));
+        _store.Apply(new GroupArrivedDto(7, 3, 11));
+
+        _store.Snapshot!.Queue.Should().ContainSingle();
+    }
+
+    [Fact]
+    public void Apply_GroupAbandonedQueue_RemovesFromQueue()
+    {
+        _store.Load(BuildSnapshot(queue: [new QueuedGroupDto(7, 3), new QueuedGroupDto(8, 2)]));
+
+        _store.Apply(new GroupAbandonedQueueDto(7, 11));
+
+        _store.Snapshot!.Queue.Should().ContainSingle().Which.GroupId.Should().Be(8);
+    }
+
+    // --- GroupSeated ---
+
     [Fact]
     public void Apply_GroupSeated_OccupiesClusterAndMovesGroupFromQueueToActive()
     {
@@ -62,7 +99,7 @@ public class RestaurantStoreTests
     }
 
     [Fact]
-    public void Apply_SameEventTwice_IsIdempotent()
+    public void Apply_GroupSeated_SameEventTwice_IsIdempotent()
     {
         _store.Load(BuildSnapshot(queue: [new QueuedGroupDto(7, 3)]));
         var seated = new GroupSeatedDto(7, 1, 10);
@@ -75,7 +112,7 @@ public class RestaurantStoreTests
     }
 
     [Fact]
-    public void Apply_GroupUnknownToClient_StillOccupiesClusterWithoutInventingAnActiveGroup()
+    public void Apply_GroupSeated_GroupUnknownToClient_OccupiesClusterWithoutInventingAnActiveGroup()
     {
         _store.Load(BuildSnapshot());
 
@@ -85,11 +122,49 @@ public class RestaurantStoreTests
         _store.Snapshot.ActiveGroups.Should().BeEmpty();
     }
 
+    // --- GroupLeft / TableCleaned ---
+
+    [Fact]
+    public void Apply_GroupLeft_FreesGroupMarksClusterTablesDirty()
+    {
+        _store.Load(BuildSnapshot(queue: [new QueuedGroupDto(7, 3)]));
+        _store.Apply(new GroupSeatedDto(7, 2, 10));
+
+        _store.Apply(new GroupLeftDto(7, 2, 20));
+
+        var snapshot = _store.Snapshot!;
+        snapshot.ActiveGroups.Should().BeEmpty();
+        var cluster = snapshot.Floor.Clusters[1];
+        cluster.OccupiedByGroupId.Should().BeNull();
+        cluster.State.Should().Be("NeedsCleaning");
+        snapshot.Floor.Tables.Where(t => t.ClusterId == 2).Should().OnlyContain(t => !t.IsClean);
+        snapshot.Floor.Tables.Single(t => t.ClusterId == 1).IsClean.Should().BeTrue();
+    }
+
+    [Fact]
+    public void Apply_TableCleaned_ClusterStaysDirtyUntilEveryTableIsClean()
+    {
+        _store.Load(BuildSnapshot());
+        _store.Apply(new GroupSeatedDto(7, 2, 10));
+        _store.Apply(new GroupLeftDto(7, 2, 20));
+
+        _store.Apply(new TableCleanedDto(2, 30));
+        _store.Snapshot!.Floor.Clusters[1].State.Should().Be("NeedsCleaning");
+
+        _store.Apply(new TableCleanedDto(3, 31));
+        _store.Snapshot.Floor.Clusters[1].State.Should().Be("Free");
+    }
+
+    // Cluster 1: one table (id 1). Cluster 2: a merged pair of tables (ids 2 and 3).
     private static RestaurantSnapshotDto BuildSnapshot(long tick = 10, IReadOnlyList<QueuedGroupDto>? queue = null) => new(
         Guid.NewGuid(), tick, 1, 1, 0, 0m, 0f,
         new FloorDto(
-            [],
-            [new ClusterDto(1, [1], 2, "Free", null), new ClusterDto(2, [2], 2, "Free", null)],
+            [
+                new TableDto(1, new GridPointDto(0, 0), new GridSizeDto(1, 1), 1, true),
+                new TableDto(2, new GridPointDto(2, 0), new GridSizeDto(1, 1), 2, true),
+                new TableDto(3, new GridPointDto(3, 0), new GridSizeDto(1, 1), 2, true)
+            ],
+            [new ClusterDto(1, [1], 2, "Free", null), new ClusterDto(2, [2, 3], 4, "Free", null)],
             [], [], [], []),
         [],
         queue ?? [],
