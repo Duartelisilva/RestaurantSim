@@ -5,5 +5,9 @@ namespace RestaurantSim.Contracts.Events;
 // can't drift apart.
 public static class ClientEventNames
 {
+    public const string GroupArrived = "GroupArrived";
+    public const string GroupAbandonedQueue = "GroupAbandonedQueue";
     public const string GroupSeated = "GroupSeated";
+    public const string GroupLeft = "GroupLeft";
+    public const string TableCleaned = "TableCleaned";
 }
