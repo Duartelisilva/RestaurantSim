@@ -122,6 +122,16 @@ it arrived.
 
 AutoManager is unaffected by this ordering — it still runs as its own
 pass after the tick releases the lock (§11), outside all five steps above.
+**Implementation status — all five steps built (backported).**
+`RestaurantTickProcessor` dispatches, in order: `AdvanceKitchen` +
+`SpawnArrival` (step 1) → `AdvanceMood` + `AdvanceStaffShift` (step 2) →
+`SpreadGroupMood` (step 3) → `ProcessQueueAbandonment` (step 4) →
+`EndDayCommand` (step 5), every tick, for every restaurant. Busser cleaning
+progress (`AdvanceCleaningProgressCommand`, mechanics doc §13) is the step 2
+item of that name. Step 3 applies to queued groups as well as seated ones
+(mechanics doc §4). Queue abandonment is fully self-contained — no
+inter-group spread (mechanics doc §2).
+
 - **Cross-restaurant scheduling:** multiple `Restaurant` instances (§19 of
   the entity doc's multi-tenant model) tick fully independently of each
   other — each restaurant's own per-restaurant lock (§11) naturally
@@ -225,6 +235,30 @@ in the business logic doc (§3), formalized as its own project.
   is deliberately **not** among the toggleable systems — always automated
   regardless of AutoManager's on/off state; the player's only lever over
   MES is the per-ticket priority bump (mechanics doc §10).
+
+- **Layering — `IAutoManagerRunner` (backported from implementation).**
+  CLAUDE.md's locked layout puts strategy interfaces (`ISeatingStrategy`,
+  etc.) in the `RestaurantSim.AutoManager` project rather than
+  `Domain/Abstractions`. That meant `SimulationTickService` (Infrastructure)
+  couldn't reach `AutoManager` under the locked dependency graph
+  (`Infrastructure → Application, Domain` only). Resolved — not a deviation
+  — via `IAutoManagerRunner`, defined in Application, implemented by
+  `AutoManagerProcessor` in `AutoManager`, wired in `Api`'s composition
+  root. `RestaurantTickProcessor` (Application) calls the interface, never
+  the concrete project.
+- **Built strategies (Phase 6):** `ISeatingStrategy` (default: greedy
+  best-fit, business logic §1.2/§1.3 — drains every eligible queued group
+  each pass), `IStaffTaskPriorityStrategy` (mechanics doc §13's tiered
+  order) and `IWaiterActionStrategy` (jokes — one joke per pass per
+  restaurant, not a drain; jokes are occasional flavor, not a queue to
+  clear).
+- **Not built, flagged:** reservation-based queue priority (business logic
+  §1.1) — nothing creates a `Reservation` or routes one into the queue yet;
+  and `IKitchenSyncStrategy` — MES v1 logic sits inline in
+  `AdvanceKitchenCommandHandler`, not behind the interface this section
+  names (pure refactor, no behavior change). Waiter actions other than jokes
+  (soothing/upsell/check-in) aren't covered by anything recorded in the
+  implementation log.
 
 ---
 
@@ -388,7 +422,11 @@ Referenced by the entity doc (§19, §23) as an existing abstraction but never
 formally defined until now — closing that gap:
 
 - `ISnapshotStore` (Domain abstraction, alongside `IRestaurantRepository`/
-  `IPresetRepository<T>`): `Append(StatisticsSnapshot)` / `Query(range)`.
+  `IPresetRepository<T>`): `AppendAsync(Guid restaurantId, StatisticsSnapshot)` / `QueryAsync(Guid restaurantId, range)`
+  (**backported** — `restaurantId` is an explicit parameter so the store
+  manages restaurant association externally instead of a new field on
+  `StatisticsSnapshot`, keeping entity doc §23's struct untouched; same
+  treatment `IRestaurantRepository` gives `Restaurant`).
   Writes `StatisticsSnapshot` structs *out* of the hot `Restaurant`
   aggregate on a periodic cadence (day-end at minimum), never accumulates
   them on `Restaurant` itself (per entity doc §19's exclusion of
@@ -480,10 +518,25 @@ commands do and is easier to reason about against a working baseline.
 **Phase 6 — AutoManager.** Built only once the manual command surface
 (Phases 3–5) is proven — AutoManager's whole value is driving that
 surface, so it needs to exist and be trustworthy first.
+*Status (backported):* `ISeatingStrategy`, `IStaffTaskPriorityStrategy` and
+`IWaiterActionStrategy` are complete, tested, and wired into
+`AutoManagerProcessor` (§5), which runs after every tick for every
+restaurant. Remaining, optional: the `IKitchenSyncStrategy` extraction.
 
 **Phase 7 — Frontend (Blazor WASM).** Can start in parallel with Phase
 4–5 once SignalR events exist to consume — optional parallelization, not
 a hard sequence dependency.
+
+*Departure choreography note (not a backend logic item — logged so it isn't
+lost):* the payer stands, pays, and returns to sit — unless they're the last
+payer at the table (a split-billing DLC scenario), in which case they stand
+near their seat, pause ~1 second, then the whole group stands and leaves
+together. Already supported for MVP (single payer) by existing events:
+`BillPaid` (cue: payer pauses near seat) then `GroupLeft` (cue: whole group
+stands and exits). "Last payer" only becomes a meaningful question once
+split-billing exists — `PayBillCommand` is currently all-or-nothing (one
+`PayerId`, one atomic payment), so it would first need a per-`OwnerId`
+payment-status concept; not something a UI-side guess can cover.
 
 **Phase 8 — DLC modules, events (Inspection/Critic/Celebrity), stats.**
 Last, since these are explicitly post-MVP and designed to slot in
@@ -562,5 +615,8 @@ shape by default, not just the three cases above.
 3. Folder/file layout locked — see `CLAUDE.md`.
 4. MVP preset content (config, layout, menu) locked — see
    `restaurant-simulator-presets.md`.
-5. Implementation has not started — no code exists yet. Follow the
-   Build Order above (§10) once it does.
+5. Implementation is underway — Phases 0–6 of the Build Order (§10) are
+   built per the implementation-phase log (Phase 6's optional
+   `IKitchenSyncStrategy` extraction remains). Phases 7–8 are not recorded
+   here. Implementation-phase decisions have been backported into this
+   doc set; see the mechanics doc's §16 for what changed.

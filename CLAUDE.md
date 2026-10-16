@@ -12,9 +12,13 @@ this is the "how to work in this codebase" layer, not game design.
 - `restaurant-simulator-architecture.md` — solution structure, runtime
   model, communication strategy, platform ambitions
 
-**Project status:** design/documentation phase complete. No code exists yet.
-Do not assume any folder structure, file, or tooling beyond what's specified
-below — ask before assuming anything not already locked in the docs above.
+**Project status:** design phase complete; implementation is underway. Per
+the implementation-phase log, the command-driven core loop (architecture doc
+§10 Phase 4), tick-driven systems (Phase 5) and AutoManager (Phase 6) are
+built — only the optional `IKitchenSyncStrategy` extraction remains in
+Phase 6. Phases 7–8 are not recorded here. Do not assume any folder
+structure, file, or tooling beyond what's specified below — ask before
+assuming anything not already locked in the docs above.
 
 ---
 
@@ -168,6 +172,19 @@ RestaurantSim.Api             → all of the above (composition root)
 - Validators run at handle-time, inside the per-restaurant lock — see
   Concurrency above. Never validate against a state snapshot taken before
   the command was dispatched.
+- **No duplicated validator/handler logic.** Any business-rule check used by
+  both a command's validator and its handler (e.g. "is this table free and
+  does the group fit") must live in exactly one shared method — Domain if
+  it is pure logic with no I/O (e.g. `TableCluster.CanSeat`,
+  `OrderPhaseTransition.IsValid`), Application if it needs repository
+  access (e.g. `PlaceOrderItemValidation.AllItemsAreValidAsync`). Both
+  layers call that same method; never independently re-implement the check
+  in each place. This keeps the "validator re-checks at handle-time" safety
+  guarantee (architecture doc §11) and the handler's own defense against
+  being invoked directly (e.g. from a test bypassing the pipeline), without
+  two copies that can drift apart when only one gets edited. (Found in
+  `SeatGroupCommand` and `PlaceOrderCommand`, which originally each
+  re-implemented the same check twice.)
 
 ---
 
@@ -335,13 +352,32 @@ Strategies/
                     table-vs-bathroom ordering — mechanics doc §13)
 ```
 
+**Layering note — `IAutoManagerRunner` (implementation-phase backport):**
+strategy interfaces live in the `RestaurantSim.AutoManager` project (above),
+not `Domain/Abstractions` like every other abstraction. That created a real
+layering question — `SimulationTickService` (Infrastructure) can't reference
+`AutoManager` (`Infrastructure → Application, Domain` only). Resolved with
+`IAutoManagerRunner`, **defined in Application**, implemented by
+`AutoManagerProcessor` in `AutoManager`, and wired through DI at `Api`'s
+composition root. `RestaurantTickProcessor` (Application) calls the
+interface, never the concrete `AutoManager` project. `AutoManagerProcessor`
+runs after every tick (after the lock is released — architecture doc §11)
+and takes the lock per individual decision.
+
+**Known gap — `KitchenSync/`:** `IKitchenSyncStrategy` is not yet extracted.
+MES v1's decision logic currently lives inline in
+`AdvanceKitchenCommandHandler`. Functionally correct (MES is never
+toggleable), but doesn't yet match mechanics doc §10's stated intent that it
+sit behind a strategy interface for a future MES v2 swap. Pure refactor, no
+behavior change, not urgent.
+
 **Tests** — each `.Tests` project mirrors its source project's folder
 names exactly (e.g. `Domain.Tests/CustomerService/CustomerGroupTests.cs`)
 — a file's test is always one predictable path away.
 
 ---
 
-## Commands Introduced This Session (locked, not yet built)
+## Commands Introduced This Session (locked names; build status noted per command)
 
 Named here because they were identified as necessary during the
 concurrency sweep but don't appear in any command list elsewhere yet.
@@ -359,13 +395,18 @@ pattern as everything else — no special treatment.
   coherence-check pass** (previously unnamed placeholder). Sets
   `Customer.IsPresentAtTable` (mechanics doc §12); `ReturnToTableCommand`
   also applies the cleanliness-driven Mood delta on return
-- `DeliverOrderItemCommand` — plating/delivery leg dispatch (mechanics doc §10)
+- `DeliverOrderItemCommand` — plating/delivery leg dispatch (mechanics doc §10).
+  **Built** (implementation-phase backport), including pickup-item handling
+  and `QualityAtServe` computed at pickup. Still *not* built:
+  `LeaveTableForBathroomCommand` / `ReturnToTableCommand` above (the
+  serve-time bonus for absent customers waits on them — mechanics doc §10)
 
 **Added — coherence-check pass, day/season session:**
 - `EndDayCommand` — sim-loop-dispatched (not player-facing) once
   `DayEndEligible` (mechanics doc §15); appends the day's
   `StatisticsSnapshot`, applies day-end costs, resets bathroom
-  cleanliness, advances to the next day
+  cleanliness, advances to the next day. **Built, except day-end costs**
+  (no cost formula exists yet; `Costs` is always 0 — mechanics doc §15)
 - `SkipToNextMealPeriodCommand` — player-facing, optional convenience for
   jumping an intra-day gap between two active meal periods (mechanics doc
   §15)
@@ -375,6 +416,38 @@ pattern as everything else — no special treatment.
 **Added — coherence-check pass, `DomainEvents/` additions:**
 - `DayEnded` — past-tense fact raised by `EndDayCommand` (mechanics doc
   §15)
+
+**Added — implementation-phase backport (commands built, names now locked):**
+- `CreateRestaurantCommand` — session bootstrap: converts
+  `RestaurantConfig.StaffRosterSeed`/`TableLayoutId` into a real staffed,
+  furnished `Restaurant`. Seeds `FloorState.Freezers` (entity doc §18a/§19).
+  Seeded staff start `State = Idle` — a flagged simplification, see entity
+  doc §24a
+- `PayBillCommand`, `LeaveTableCommand` — complete the Phase 4 loop.
+  `LeaveTableCommand` requires `LifecycleState == Leaving` (set only by
+  `PayBillCommand`): it is an already-paid group's departure, **not** a
+  mid-meal walkout (a distinct, unbuilt mechanic)
+- `CleanTableCommand` — **name was never previously locked** (only
+  `BussersCleanBathroomCommand` was); `AdvanceCleaningProgressCommand` —
+  tick-driven cleaning progress, same pattern as `AdvanceKitchenCommand`
+- `TellJokeCommand` — joke resolution (mechanics doc §11)
+- Tick-dispatched, in the architecture doc §2a order: `AdvanceKitchenCommand`
+  and `SpawnArrivalCommand` (step 1), `AdvanceMoodCommand` and
+  `AdvanceStaffShiftCommand` (step 2), `SpreadGroupMoodCommand` (step 3),
+  `ProcessQueueAbandonmentCommand` (step 4), `EndDayCommand` (step 5).
+  *(The implementation log writes `SpawnArrival`/`ProcessQueueAbandonment`
+  without the suffix — class names here follow the `VerbNounCommand`
+  convention; confirm against the code.)*
+
+**Domain-event notes (implementation-phase backport):**
+- `GroupLeft` carries `PartySize` (added — without it, statistics would
+  count table-visits instead of people); `BillPaid` carries the computed tip
+- No per-tick domain event fires for Mood (architecture doc §3).
+  `MoodChanged` is reserved for a future, targeted use — firing only on Mood
+  *tier* boundary crossings — and is not built yet
+- `ISnapshotStore.AppendAsync`/`QueryAsync` take `Guid restaurantId` as an
+  explicit parameter instead of a field on `StatisticsSnapshot`, keeping
+  entity doc §23's struct unchanged (architecture doc §7.5)
 
 ---
 

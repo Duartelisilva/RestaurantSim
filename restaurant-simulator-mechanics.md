@@ -51,6 +51,26 @@ Discrete events (flat, not per-tick):
 | Wrong/cold item (severity-scaled) | `-8` to `-20` |
 | Waiter action success | `+5` to `+15` |
 | Waiter action failure | `-3` to `-10` |
+| Re-inform (ticket flips to async) | `-ReinformMoodPenalty` (first-pass default `3`) — flat, once per flip, present group members only (`IsPresentAtTable == true`) |
+
+**Re-inform penalty (new — implementation-phase backport, confirmed in
+chat).** Not in any earlier locked doc: being told food is coming separately
+carries its own small emotional cost, on top of ongoing course-wait decay.
+`RestaurantConfig.ReinformMoodPenalty` (entity doc §22) is nullable/open;
+first-pass default `3`, the low end of the waiter-action-failure range above.
+See §10 for where it fires.
+
+**Continuous per-tick Mood (built as `AdvanceMoodCommand`).** One
+interpretation call, not previously spelled out: whether a person is
+currently "waiting on a course" (Course-wait decay) or not (Natural
+recovery) is determined **per person**, by whether they own any `OrderItem`
+with `Status != Served`. The docs above describe this at table/group level
+(`CoursePhase`); per-person means a customer whose own dish already arrived,
+while a tablemate's is still cooking, correctly gets recovery while the
+tablemate still decays. **Worth confirming** — it's the intended reading
+here but not explicitly stated before. No domain event fires per tick
+(architecture doc §3); `MoodChanged` is reserved for a future, targeted use
+on Mood **tier** boundary crossings.
 
 Clamp `Mood ∈ [0,100]` after every apply.
 
@@ -61,6 +81,19 @@ Clamp `Mood ∈ [0,100]` after every apply.
 | Mid | 40–69 |
 | Low | 15–39 |
 | Very Low | 0–14 |
+
+**Queue abandonment (new — implementation-phase backport; business logic
+§1.2).** A queued group abandons when its average Mood drops below
+`QueueAbandonmentMoodThreshold` (`RestaurantConfig`, entity doc §22;
+nullable, defaults to `15` — the Very Low tier boundary above). The check is
+**deterministic and runs every tick** (architecture doc §2a step 4), not
+throttled to probability checkpoints. Consequence: a **flat reputation
+penalty of `0.5` per abandonment** (a pure code constant for now), regardless
+of how many other groups were queued — the earlier "worse if witnessed"
+clause is dropped entirely. No effect on other customers, no inter-group
+Mood spread (§5), no complaints-book interaction (that was never wired). The
+penalty also closes a real design gap: Reputation previously had a growth
+loop with nothing pulling back the other way.
 
 ---
 
@@ -114,6 +147,24 @@ SpreadRate = 0.05/tick   // 0.075/tick if full-group avg Mood < 30 (tipping poin
 MoodDelta_i = SusceptibilityToGroup_i × (GroupWeightedAvg_i - Mood_i) × SpreadRate
 ```
 
+**Implementation-phase clarifications (built as `SpreadGroupMoodCommand`,
+backported):**
+- **Applies to queued groups too, not only seated ones.** §4 was written in
+  the context of seated-group psychology, but nothing restricts it to seated
+  groups, and people waiting in line together plausibly affect each other —
+  an interpretation call; **worth an explicit confirmation either way**.
+- **Tipping-point check uses present members only.** The "full-group avg
+  Mood < 30" test is computed from members with `IsPresentAtTable == true`,
+  excluding anyone currently absent (bathroom). Absent members are frozen —
+  not "in the room" contributing to the atmosphere — consistent with their
+  exclusion from the spread calculation itself. Not stated in this doc
+  before.
+- **Single snapshot per group.** All of a group's deltas are computed from
+  one Mood snapshot taken before any are applied, then applied together, so
+  every member's delta reflects the same starting values (this tick's
+  already-decayed Mood, per architecture doc §2a) rather than a
+  partially-spread value from an earlier-processed member.
+
 ---
 
 ## 5. Inter-Group Mood Spread
@@ -132,6 +183,11 @@ Magnitude = BasePenalty(eventType) × AvgSusceptibility(nearby group)
   Loud complaint base = -6
 ```
 
+Queue abandonment (§2) is **not** a trigger here — it's fully self-contained,
+with no inter-group spread. "Walkout" above means the (not-yet-built)
+mid-meal walkout without paying, a different mechanic from queue abandonment
+(pre-seating) and from an already-paid group's departure.
+
 ---
 
 ## 6. Tip Calculation
@@ -149,6 +205,18 @@ Guarantees `Mood = 0 → TipAmount = 0`. `TipBaseRate` (default `50`) and
 (entity doc §22) — not hardcoded.
 
 Reference curve (Normal tendency): Mood 0→0%, 10→~9%, 50→~30%, 90→~46%, 100→50%.
+
+**Whose Mood and `SpendingTendency` (implementation-phase interpretation
+call, backported — worth confirming).** Business logic §1.1/§1.7 say "Mood
+sampled at payment time" without saying whose. `PayBillCommand` uses the
+**payer's own** `Mood` and `SpendingTendency` (`CustomerGroup.PayerId`) —
+whoever is actually deciding the tip is the one whose satisfaction should
+drive it — not the group average.
+
+**Tip → Morale is not applied.** The computed tip is carried on the `BillPaid`
+event but is not applied to any `StaffMember.Morale`: no tip-to-Morale
+conversion formula exists anywhere (entity doc §7 already flags Morale's
+formula as undefined).
 
 ---
 
@@ -317,6 +385,17 @@ Actual start can slip past `StartTick_i` under station contention —
 `TargetReadyTick`. That gap is what threatens sync and triggers the
 heat-lamp-vs-reinform decision below.
 
+**Course-sync before a cook is assigned (implementation-phase backport).**
+The formula above is locked, but it doesn't say how to apply it before any
+cook exists — no cook is assigned at submission time. It is computed **at
+ticket-submission time using nominal baseline stats** (`Speed = 0.5`,
+`Fatigue = 0`, entity doc §7's own "average, no modifier" default).
+`TargetReadyTick` and each `PlannedStartTick_i` (`OrderItem.PlannedStartTick`,
+entity doc §13) are stored per the formula; a station- and cook-available
+item still **deliberately waits** until its `PlannedStartTick` before
+starting. This is how the locked formula is satisfied, not a simplification
+of it.
+
 ### Station contention — Oldest-Ticket-First
 
 When a station's slots are full, queued items wait ordered by their
@@ -369,6 +448,23 @@ If A had instead finished at 108 with B projected for 111,
 serve-now" — the same 9-tick hold might be approved early in a visit but
 rejected later, purely because the table's total wait has grown.
 
+**Heat-lamp projection for a still-`Queued` sibling (addendum — a genuine
+interpretation call).** The walkthrough above only covers two
+*already-cooking* siblings. For a sibling that hasn't started yet, no
+projection was given. Decided: project it as
+
+```
+ProjectedReadyTick = max(ticket.TargetReadyTick, CurrentTick + that item's nominal EffectivePrepTicks)
+```
+
+— bounds the estimate without assuming an unrealistic best case. Feed this
+into `ActualProjectedReadyTick(slowest remaining item)` above.
+
+**Re-inform Mood cost.** When a ticket flips to async/re-inform mode
+(`KitchenTicket.IsAsyncMode`, entity doc §14), each still-waiting group
+member with `IsPresentAtTable == true` takes a one-time flat penalty,
+`ReinformMoodPenalty` (§2; first-pass default `3`).
+
 ### Food quality — bool, mutually exclusive with negative events, decay-linked
 
 ```
@@ -406,6 +502,21 @@ QualityAtServe < 60 → MoodBonus = -8    (degraded)
 Extends `QualityAtServe`'s documented role (previously fed only the
 negative-event chance) to also directly bump Mood at serve time.
 
+**Presence rule and a known simplification (implementation-phase backport,
+corrected in chat).** The serve-time bonus is **skipped entirely** if the
+customer is absent (`IsPresentAtTable == false`, e.g. in the bathroom) at
+delivery time. An earlier version applied it regardless, reasoning it was a
+discrete event like waiter-action success/failure — wrong: a customer can't
+react to food they haven't seen or tasted. `QualityAtServe` is computed at
+**pickup-for-delivery** (matching the hold-clock rule below) by
+`DeliverOrderItemCommand`; `OrderItem.HadFoodQualityEvent` stores the roll
+result so it's actually consumed there. **The fully correct model would defer
+the bonus to when the customer returns to the table** (mirroring §12's
+return-delta pattern) rather than forfeit it. That isn't built, because
+`LeaveTableForBathroomCommand`/`ReturnToTableCommand` don't exist yet — it
+should become deferred-credit-on-return once they do, not permanent
+forfeiture.
+
 ### Plating & delivery — manual transport, two legs
 
 - **Cook → pass point** (in-kitchen shuffle): flat `PlatingTicks =
@@ -422,6 +533,22 @@ negative-event chance) to also directly bump Mood at serve time.
   for delivery, not once it **arrives** at the table — the hold clock is
   about kitchen-side wait, delivery is separate execution time layered after
   the decision, not before it.
+
+**Pickup items (Drinks) — handled by `DeliverOrderItemCommand`
+(implementation-phase backport).** Pickup items have no station or cook, so
+nothing in the kitchen flow ever progressed them past `Queued` — which
+would have blocked `PayBillCommand` forever for any group that ordered a
+drink (payment correctly requires every item `Served`). They're now handled
+directly by delivery: no station/cook, just a flat fetch-time gate,
+`OrderItem.CreatedAtTick + PrepTicks`. No station contention model for them.
+
+**Current delivery scope (deliberate; Phase 5+ for the real thing).**
+Delivery is flat/instant, gated only on an idle waiter existing — no
+waiter-busy-during-transit modeling and no distance-based travel time yet.
+The real pathfinding leg above is still the target. Don't design delivery
+around a rigid one-item-per-trip assumption: a waiter's plate-carrying
+capacity is a planned DLC stat (entity doc §7, `Experience` → `Level`),
+which turns delivery into a batching decision.
 
 ### Player priority bump (manual MES override)
 
@@ -475,7 +602,7 @@ P(staff notices & jokes) by table's lowest-Mood member's tier:
 
 **Cooldown:** a table is ineligible for another *autonomous* joke for
 `AutoJokeCooldownTicks` — derived from the preset-authored
-`AutoJokeCooldownSeconds` per §14, open/pending playtesting — after the
+`AutoJokeCooldownSeconds` per §14 (first-pass default `60`, pending playtesting) — after the
 most recent joke at that table — from either AutoManager **or** the
 player. Player jokes are never blocked by this cooldown themselves, but
 they still update the timer, so AutoManager won't immediately stack a
@@ -490,7 +617,7 @@ joke right after the player already spent one on that table.
   One member ≥ MoodGapThreshold below the rest → target that person
   Otherwise (no clear outlier)                 → target the table
   ```
-  `MoodGapThreshold` open, pending playtesting.
+  `MoodGapThreshold` — first-pass default `20`, pending playtesting.
 
 ### Roll — one shared outcome per joke, regardless of targeting mode
 
@@ -498,11 +625,21 @@ joke right after the player already spent one on that table.
 JokeFatigueMultiplier(JokeCount) = max(0.2, 1 - 0.25 × JokeCount)
 EffectiveCharisma = WaiterCharisma × JokeFatigueMultiplier(TableCluster.RecentJokeCount)
 
-RollTargetMood = targeted person's Mood         (person-targeted)
-                 lowest-Mood member's Mood       (table-targeted)
-
-Single success/failure roll: EffectiveCharisma vs RollTargetMood
+P(success) = EffectiveCharisma        // plain — Mood does NOT gate success chance
 ```
+
+**Resolved — implementation-phase backport, confirmed in chat.** This
+section (and business logic §1.6) originally said "roll `EffectiveCharisma`
+vs `RollTargetMood`" without ever giving the comparison — and the two aren't
+even on the same scale (Charisma 0–1, Mood 0–100). The resolved model:
+**Mood does not gate success chance at all**; `P(success) = EffectiveCharisma`,
+plain. `RollTargetMood` is consequently unused. Mood still matters, but only
+downstream: Magnitude below scales by each present member's **own** tier,
+never the roll target's. "Jokes get worse with repetition" (business logic
+§1.6) already falls entirely out of `JokeFatigueMultiplier` shrinking
+`EffectiveCharisma` — no separate rule needed. Built as `TellJokeCommand` and
+`IWaiterActionStrategy`, with a shared `MoodTierCalculator` utility (§2's tier
+boundaries).
 
 ### Magnitude — applies to every member currently `IsPresentAtTable == true`
 
@@ -532,8 +669,16 @@ TableCluster.LastJokeTick = CurrentTick   on every joke — feeds only the
                                            AutoManager cooldown check above
 ```
 
-**Open, pending playtesting:** `AutoJokeCooldownSeconds` (preset-authored;
-`AutoJokeCooldownTicks` is its derived form per §14), `MoodGapThreshold`.
+**Scope, confirmed deliberate:** AutoManager tells **one joke per pass per
+restaurant**, not draining every eligible table the way seating does — jokes
+are occasional flavor, not a queue to clear. When the cluster "fully clears"
+for the `RecentJokeCount` reset, that means **every** member `Table` is
+clean (`State` derives to `Free`), not the first table to finish (entity doc
+§5).
+
+**First-pass defaults (implementation phase — no doc-cited example existed,
+still pending playtesting):** `AutoJokeCooldownSeconds = 60` (preset-authored;
+`AutoJokeCooldownTicks` is its derived form per §14), `MoodGapThreshold = 20`.
 
 ---
 
@@ -723,6 +868,24 @@ other AutoManager decision heuristics at this stage (see architecture doc
 §5's `ISeatingStrategy`/`IKitchenSyncStrategy` pattern; this is the same
 shape, `IStaffTaskPriorityStrategy`, applied to Bussers).
 
+**Implementation notes and first-pass defaults (backported).**
+- `Table.CleaningProgress: float` (entity doc §3) stores the 0–100 progress
+  the formula produces; `IsClean` alone had nowhere to hold it.
+- Built as `CleanTableCommand`, `BussersCleanBathroomCommand` and
+  `AdvanceCleaningProgressCommand` (CLAUDE.md). The Speed/Fatigue curve is
+  extracted once as `PerformanceMultipliers`, shared by
+  `KitchenPrepTimeCalculator` and cleaning-progress logic — this section
+  already states the Busser reuses Cook's exact curve shape from §10, so
+  there is one implementation instead of a third copy.
+- **First-pass defaults — no doc-cited examples existed for any of these:**
+  `TableCleaningBaseSeconds = 60`, `BathroomCleaningBaseSeconds = 180`,
+  `DirtyThreshold = 30`, `AlmostDirtyThreshold = 60` (§12's two-tier shape;
+  values not derived from anything more specific). Still tunable.
+- `IStaffTaskPriorityStrategy` implements the tiered ordering above exactly
+  (urgent bathroom > dirty table > eligible bathroom > idle). **Tier 1
+  ("finish current task") is not a strategy branch** — the orchestrator only
+  ever asks currently-`Idle` Bussers.
+
 ---
 
 ## 13a. Staff Fatigue Accrual (added — real gap, not just a backport)
@@ -731,8 +894,8 @@ shape, `IStaffTaskPriorityStrategy`, applied to Bussers).
 "rises over a shift," and §10/§13 already define how `Fatigue` *degrades*
 Cook/Busser performance once it exists — but no formula ever specified
 how `Fatigue` actually accumulates tick-to-tick. Every other stat at
-least has a first-pass curve; this one didn't. Conceptually decided,
-coefficients intentionally left open rather than guessed:
+least has a first-pass curve; this one didn't. Decided conceptually, then
+built with first-pass coefficients (see the bullets below):
 
 ```
 FatigueDelta_per_tick =
@@ -751,17 +914,34 @@ Fatigue = clamp(Fatigue + FatigueDelta_per_tick, 0, 1)   // StaffStats range, en
   slower, matching the real cost of understaffing rather than treating
   overtime as free.
 - `BaseFatigueAccrualRate` and `OvertimeFatigueMultiplier` are both
-  `RestaurantConfig` fields (entity doc §22) — open, pending playtesting,
-  same treatment as `PatienceDecayBaseline`. Do not guess numbers for
-  either; flag as pending if asked.
+  `RestaurantConfig` fields (entity doc §22), still pending playtesting. **First-pass
+  defaults now exist (implementation-phase backport)** — derived from a
+  stated design intent rather than guessed: `BaseFatigueAccrualRate` targets
+  "reaches ~1.0 `Fatigue` by the end of a typical 12-hour shift", and
+  `OvertimeFatigueMultiplier = 2.0` (confirmed in chat: overtime is more
+  tiring, not less).
+  **⚠ Unit discrepancy — flagged, needs a decision, not silently
+  resolved.** The implemented default is `≈ 0.0000231` per tick "at
+  `TicksPerRealSecond = 1`", which is `1 / 43,200` — i.e. 12 *real-time*
+  hours of ticks. But `default_diner` has `MinutesPerTick = 1`, so a 12-hour
+  *in-game* shift is only `720` ticks (presets doc), which would need
+  `≈ 0.001389` per tick (`1 / 720`). At the implemented value a staff member
+  would end a full in-game shift with `Fatigue ≈ 0.017` — effectively no
+  fatigue at all. Either the intent was meant in real time (then say so, and
+  the rate should be derived from `MinutesPerTick` so it stays consistent if
+  that knob changes) or the default is ~60× too low. Not changed here.
 - Resets to `0` on the `Busy`/`Idle → OffShift` transition at `ShiftEnd`
   (entity doc §6/§24a) — unaffected by this section, already locked.
 
-**Status:** decided/confirmed conceptually during implementation-phase
-discussion; exact coefficients not yet chosen. Belongs to Phase 5 (sim
-loop + tick-driven systems, architecture doc §10) — does not block
-Phase 4's remaining lifecycle stages (Queue, Ordering, Kitchen, Eating,
-Paying, Leaving), none of which depend on Fatigue accruing correctly yet.
+**Status — updated, implementation-phase backport:** formula built as
+`AdvanceStaffShiftCommand` (Phase 5), with first-pass defaults above (see the
+⚠ unit discrepancy). Coverage-gating of `ShiftEnd` is built too; two notes
+from that work: (1) which same-role staff member stays when several are
+eligible to clock out is currently just iteration order — an arbitrary
+tie-break, flagged in entity doc §24a; (2) Busser coverage demand only
+checks dirty `Table`s, not bathroom thresholds — deliberate when written, but
+the Busser priority system (§13) has since been built, so whether coverage
+should now count bathrooms is an open decision.
 
 ---
 
@@ -858,6 +1038,18 @@ logic §1.1), but a group already queued or seated before closing is still
 served out normally (including the existing Mood-based abandonment path)
 rather than being cut off.
 
+**Edge case in the locked formula itself — addendum (implementation-phase
+backport).** `CurrentTick's time-of-day >= Closing` can never literally
+trigger when `Closing = 1440` (midnight): `minutesIntoDay` is a modulo
+result, always in `[0, 1440)`, so it wraps to `0` and never reaches `1440`.
+Any restaurant whose last period ends at midnight — including
+`default_diner`'s dinner, 19:00–00:00 — would never end its day by the
+literal formula. Fixed by special-casing `Closing >= 1440` to check
+`minutesIntoDay == 0` instead. This holds for MVP's `MinutesPerTick = 1`
+(`minutesIntoDay` passes through exactly `0` once per day) but is **not
+necessarily a general solution** for every possible tick-resolution config
+(e.g. a `MinutesPerTick` that skips over `0`).
+
 Checked at the same tick-scheduled cadence as other timed transitions
 (§8). On `DayEndEligible == true`, the sim loop dispatches
 `EndDayCommand` — not an inline side-effect, per CLAUDE.md's concurrency
@@ -878,6 +1070,17 @@ rules — which:
    convention) — Infrastructure can translate this into a day-end summary
    screen over SignalR.
 
+**Implementation status (backported).** Actions 1 and 2 were initially
+unbuilt: appending a snapshot of fake zeros would have misrepresented the
+system as more complete than it is, so it was skipped honestly. Action 1 now
+exists — `EndDayCommand` appends a genuine `StatisticsSnapshot` through a real
+`ISnapshotStore`, fed by a statistics accumulator (entity doc §23 for the
+semantics). Action 2 (day-end costs) is **still unbuilt**: no formula or
+tracking exists for wages, cleaning fee, restock, maintenance or utilities, so
+`Costs` is always `0` (and `AvgWaitTicks` always `0`). `CurrentDayNumber`
+(action 4) had been missing from Phase 1's implementation despite entity doc
+§19 listing it — added.
+
 ### Player-triggered skip — `SkipToNextMealPeriodCommand`
 
 For an **intra-day** gap between two of a restaurant's own active periods
@@ -893,7 +1096,7 @@ SkipEligible = CurrentTick's time-of-day is between two ActiveMealPeriods
                AND ActiveGroups.Count == 0 AND Queue.Count == 0
 ```
 
-Jumps `SimulationTick` directly to the next period's `StartTime`.
+Jumps `SimulationTick` directly to the next period's `StartTime`. (Built, fully implemented, no gaps.)
 **Safe for arrivals; now resolved for Fatigue too — updated, §13a
 backport.** No arrivals spawn during a closed gap (period-gated) — safe
 by construction. `OffShift` spans a staff member's full daily shift
@@ -1015,3 +1218,13 @@ record of what this session originally flagged — no further action needed.
   doc §22) to back the tip formula's previously-unnamed literal
   coefficients, and `PatienceDecayBaseline` wired into the §2 decay
   formula (was defined as a field but never consumed anywhere).
+
+**Implementation-phase backport pass (items from `PENDING-DOC-CHANGES.md`).**
+Merged into this doc: §2 (re-inform penalty, per-person course-wait reading,
+queue-abandonment threshold/penalty), §4 (queued-group spread, present-only
+tipping point, single snapshot), §5, §6 (payer's Mood), §10 (pre-assignment
+course-sync method, queued-sibling projection, serve-time presence rule,
+pickup items, delivery scope), §11 (resolved success roll), §13/§13a
+(cleaning and fatigue defaults, ⚠ fatigue unit discrepancy), §15 (midnight
+edge case, `EndDayCommand` status). Interpretation calls marked "worth
+confirming" above remain open until the owner decides.
