@@ -25,6 +25,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RestaurantSim.Contracts", "
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RestaurantSim.Client", "RestaurantSim.Client\RestaurantSim.Client.csproj", "{E972B43D-3AE0-4A4C-867D-2161DF7D332B}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RestaurantSim.Client.Tests", "RestaurantSim.Client.Tests\RestaurantSim.Client.Tests.csproj", "{30C30964-BA1B-4B25-80B5-600DF048E45D}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -78,5 +80,9 @@ Global
 		{E972B43D-3AE0-4A4C-867D-2161DF7D332B}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{E972B43D-3AE0-4A4C-867D-2161DF7D332B}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{E972B43D-3AE0-4A4C-867D-2161DF7D332B}.Release|Any CPU.Build.0 = Release|Any CPU
+		{30C30964-BA1B-4B25-80B5-600DF048E45D}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{30C30964-BA1B-4B25-80B5-600DF048E45D}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{30C30964-BA1B-4B25-80B5-600DF048E45D}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{30C30964-BA1B-4B25-80B5-600DF048E45D}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 EndGlobal
