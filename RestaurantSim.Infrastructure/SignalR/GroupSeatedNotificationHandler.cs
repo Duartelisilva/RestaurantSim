@@ -1,12 +1,14 @@
 using MediatR;
 using Microsoft.AspNetCore.SignalR;
+using RestaurantSim.Contracts.Events;
 using RestaurantSim.Domain.DomainEvents;
 
 namespace RestaurantSim.Infrastructure.SignalR;
 
 // Infrastructure-layer translation: Domain raises "this happened," Infrastructure
 // decides whether/how that becomes a network message (architecture doc §3).
-// Broadcasts to a per-restaurant SignalR group, not all connected clients.
+// Sends a Contracts DTO (the wire contract), never the Domain notification itself,
+// to the per-restaurant SignalR group.
 public sealed class GroupSeatedNotificationHandler : INotificationHandler<GroupSeated>
 {
     private readonly IHubContext<RestaurantHub> _hubContext;
@@ -18,8 +20,10 @@ public sealed class GroupSeatedNotificationHandler : INotificationHandler<GroupS
 
     public Task Handle(GroupSeated notification, CancellationToken cancellationToken)
     {
+        var dto = new GroupSeatedDto(notification.GroupId, notification.ClusterId, notification.Tick);
+
         return _hubContext.Clients
             .Group(notification.RestaurantId.ToString())
-            .SendAsync("GroupSeated", notification, cancellationToken);
+            .SendAsync(ClientEventNames.GroupSeated, dto, cancellationToken);
     }
 }
