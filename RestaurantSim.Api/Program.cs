@@ -32,8 +32,11 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 builder.Services.AddSingleton<IRestaurantRepository, InMemoryRestaurantRepository>();
-builder.Services.AddMediatR(cfg => cfg.RegisterServicesFromAssembly(typeof(SeatGroupCommand).Assembly));
-builder.Services.AddValidatorsFromAssembly(typeof(SeatGroupCommandValidator).Assembly);
+builder.Services.AddMediatR(cfg =>
+{
+    cfg.RegisterServicesFromAssembly(typeof(SeatGroupCommand).Assembly);
+    cfg.RegisterServicesFromAssembly(typeof(RestaurantHub).Assembly); // Infrastructure: SignalR notification handlers
+}); builder.Services.AddValidatorsFromAssembly(typeof(SeatGroupCommandValidator).Assembly);
 builder.Services.AddTransient(typeof(IPipelineBehavior<,>), typeof(RestaurantLockBehavior<,>));
 builder.Services.AddTransient(typeof(IPipelineBehavior<,>), typeof(ValidationBehavior<,>));
 builder.Services.AddSignalR();
