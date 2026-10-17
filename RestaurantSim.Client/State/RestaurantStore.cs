@@ -40,7 +40,31 @@ public sealed class RestaurantStore
         if (!TryGetCurrent(e.Tick, out var s))
             return false;
 
-        Commit(s with { Queue = s.Queue.Where(g => g.GroupId != e.GroupId).ToList() });
+        Commit(s with
+        {
+            Queue = s.Queue.Where(g => g.GroupId != e.GroupId).ToList(),
+            Reputation = e.Reputation
+        });
+        return true;
+    }
+
+    // Cash and Reputation arrive as absolute values after the change, never
+    // deltas, so a duplicate or replayed event cannot double-apply.
+    public bool Apply(GroupTurnedAwayDto e)
+    {
+        if (!TryGetCurrent(e.Tick, out var s))
+            return false;
+
+        Commit(s with { Reputation = e.Reputation });
+        return true;
+    }
+
+    public bool Apply(BillPaidDto e)
+    {
+        if (!TryGetCurrent(e.Tick, out var s))
+            return false;
+
+        Commit(s with { Cash = e.Cash });
         return true;
     }
 

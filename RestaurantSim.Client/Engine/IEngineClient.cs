@@ -16,10 +16,12 @@ public interface IEngineClient : IAsyncDisposable
     event Action<ConnectionState>? ConnectionStateChanged;
 
     event Action<GroupArrivedDto>? GroupArrived;
+    event Action<GroupTurnedAwayDto>? GroupTurnedAway;
     event Action<GroupAbandonedQueueDto>? GroupAbandonedQueue;
     event Action<GroupSeatedDto>? GroupSeated;
     event Action<GroupLeftDto>? GroupLeft;
     event Action<TableCleanedDto>? TableCleaned;
+    event Action<BillPaidDto>? BillPaid;
 
     Task ConnectAsync(CancellationToken cancellationToken = default);
 

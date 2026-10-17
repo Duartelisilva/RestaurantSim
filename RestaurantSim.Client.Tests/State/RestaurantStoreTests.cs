@@ -60,9 +60,54 @@ public class RestaurantStoreTests
     {
         _store.Load(BuildSnapshot(queue: [new QueuedGroupDto(7, 3), new QueuedGroupDto(8, 2)]));
 
-        _store.Apply(new GroupAbandonedQueueDto(7, 11));
+        _store.Apply(new GroupAbandonedQueueDto(7, 19.5f, 11));
 
         _store.Snapshot!.Queue.Should().ContainSingle().Which.GroupId.Should().Be(8);
+        _store.Snapshot.Reputation.Should().Be(19.5f);
+    }
+
+    // --- Cash / Reputation (absolute values, idempotent) ---
+
+    [Fact]
+    public void Apply_BillPaid_SetsCashToTheAbsoluteValue()
+    {
+        _store.Load(BuildSnapshot());
+
+        _store.Apply(new BillPaidDto(7, 12.50m, 3.10m, 5012.50m, 20)).Should().BeTrue();
+
+        _store.Snapshot!.Cash.Should().Be(5012.50m);
+    }
+
+    [Fact]
+    public void Apply_BillPaid_SameEventTwice_DoesNotDoubleCount()
+    {
+        _store.Load(BuildSnapshot());
+        var paid = new BillPaidDto(7, 12.50m, 3.10m, 5012.50m, 20);
+
+        _store.Apply(paid);
+        _store.Apply(paid);
+
+        _store.Snapshot!.Cash.Should().Be(5012.50m);
+    }
+
+    [Fact]
+    public void Apply_BillPaid_OlderThanSnapshot_IsIgnored()
+    {
+        _store.Load(BuildSnapshot(tick: 10));
+
+        _store.Apply(new BillPaidDto(7, 12.50m, 3.10m, 5012.50m, 9)).Should().BeFalse();
+
+        _store.Snapshot!.Cash.Should().Be(0m);
+    }
+
+    [Fact]
+    public void Apply_GroupTurnedAway_SetsReputation()
+    {
+        _store.Load(BuildSnapshot());
+
+        _store.Apply(new GroupTurnedAwayDto(19.8f, 11)).Should().BeTrue();
+
+        _store.Snapshot!.Reputation.Should().Be(19.8f);
     }
 
     // --- GroupSeated ---

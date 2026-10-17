@@ -16,7 +16,11 @@
 
 @if (Store.Snapshot is { } snapshot && Session.Clock is { } clock)
 {
-    <p>In-game time: @clock.TimeOfDay(DateTimeOffset.UtcNow).ToString("HH:mm")</p>
+    <p>
+        In-game time: @clock.TimeOfDay(DateTimeOffset.UtcNow).ToString("HH:mm")
+        · Cash: @snapshot.Cash.ToString("N2")
+        · Reputation: @snapshot.Reputation.ToString("0.0")
+    </p>
 
     <div class="floor-layout">
         <FloorView Snapshot="snapshot" />

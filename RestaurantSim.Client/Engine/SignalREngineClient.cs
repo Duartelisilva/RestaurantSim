@@ -17,10 +17,12 @@ public sealed class SignalREngineClient : IEngineClient
             .Build();
 
         _connection.On<GroupArrivedDto>(ClientEventNames.GroupArrived, dto => GroupArrived?.Invoke(dto));
+        _connection.On<GroupTurnedAwayDto>(ClientEventNames.GroupTurnedAway, dto => GroupTurnedAway?.Invoke(dto));
         _connection.On<GroupAbandonedQueueDto>(ClientEventNames.GroupAbandonedQueue, dto => GroupAbandonedQueue?.Invoke(dto));
         _connection.On<GroupSeatedDto>(ClientEventNames.GroupSeated, dto => GroupSeated?.Invoke(dto));
         _connection.On<GroupLeftDto>(ClientEventNames.GroupLeft, dto => GroupLeft?.Invoke(dto));
         _connection.On<TableCleanedDto>(ClientEventNames.TableCleaned, dto => TableCleaned?.Invoke(dto));
+        _connection.On<BillPaidDto>(ClientEventNames.BillPaid, dto => BillPaid?.Invoke(dto));
 
         // Handlers only raise our event and return; anything slow (rejoining,
         // refetching) is the consumer's job and must not block SignalR's reconnect path.
@@ -33,10 +35,12 @@ public sealed class SignalREngineClient : IEngineClient
 
     public event Action<ConnectionState>? ConnectionStateChanged;
     public event Action<GroupArrivedDto>? GroupArrived;
+    public event Action<GroupTurnedAwayDto>? GroupTurnedAway;
     public event Action<GroupAbandonedQueueDto>? GroupAbandonedQueue;
     public event Action<GroupSeatedDto>? GroupSeated;
     public event Action<GroupLeftDto>? GroupLeft;
     public event Action<TableCleanedDto>? TableCleaned;
+    public event Action<BillPaidDto>? BillPaid;
 
     public async Task ConnectAsync(CancellationToken cancellationToken = default)
     {

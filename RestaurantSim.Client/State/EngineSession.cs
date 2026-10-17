@@ -30,10 +30,12 @@ public sealed class EngineSession : IDisposable
 
         _engine.ConnectionStateChanged += OnConnectionStateChanged;
         _engine.GroupArrived += OnGroupArrived;
+        _engine.GroupTurnedAway += OnGroupTurnedAway;
         _engine.GroupAbandonedQueue += OnGroupAbandonedQueue;
         _engine.GroupSeated += OnGroupSeated;
         _engine.GroupLeft += OnGroupLeft;
         _engine.TableCleaned += OnTableCleaned;
+        _engine.BillPaid += OnBillPaid;
         _store.Changed += RaiseChanged;
     }
 
@@ -177,6 +179,18 @@ public sealed class EngineSession : IDisposable
             AddLog($"[tick {dto.Tick}] group {dto.GroupId} arrived (party of {dto.PartySize})");
     }
 
+    private void OnGroupTurnedAway(GroupTurnedAwayDto dto)
+    {
+        if (_store.Apply(dto))
+            AddLog($"[tick {dto.Tick}] a group was turned away (queue full)");
+    }
+
+    private void OnBillPaid(BillPaidDto dto)
+    {
+        if (_store.Apply(dto))
+            AddLog($"[tick {dto.Tick}] group {dto.GroupId} paid {dto.Revenue:N2} (tip {dto.TipAmount:N2})");
+    }
+
     private void OnGroupAbandonedQueue(GroupAbandonedQueueDto dto)
     {
         if (_store.Apply(dto))
@@ -222,10 +236,12 @@ public sealed class EngineSession : IDisposable
     {
         _engine.ConnectionStateChanged -= OnConnectionStateChanged;
         _engine.GroupArrived -= OnGroupArrived;
+        _engine.GroupTurnedAway -= OnGroupTurnedAway;
         _engine.GroupAbandonedQueue -= OnGroupAbandonedQueue;
         _engine.GroupSeated -= OnGroupSeated;
         _engine.GroupLeft -= OnGroupLeft;
         _engine.TableCleaned -= OnTableCleaned;
+        _engine.BillPaid -= OnBillPaid;
         _store.Changed -= RaiseChanged;
     }
 }
