@@ -69,6 +69,6 @@ public static class DefaultDinerConfigSeed
         // New fields — not yet in entity doc §22, added specifically to make
         // Arrival implementable. Flag for backport into the locked doc once approved.
         MaxQueueLength = 12,             // first-pass proposed default
-        BaseArrivalIntervalSeconds = 120f // first-pass proposed default (2 min at MVP tick rate)
+        BaseArrivalIntervalSeconds = 15f // first-pass proposed default (2 min at MVP tick rate)
     };
 }
