@@ -18,7 +18,7 @@ public sealed class GroupAbandonedQueueNotificationHandler : INotificationHandle
 
     public Task Handle(GroupAbandonedQueue notification, CancellationToken cancellationToken)
     {
-        var dto = new GroupAbandonedQueueDto(notification.GroupId, notification.Tick);
+        var dto = new GroupAbandonedQueueDto(notification.GroupId, notification.ReputationAfter, notification.Tick);
 
         return _hubContext.Clients
             .Group(notification.RestaurantId.ToString())

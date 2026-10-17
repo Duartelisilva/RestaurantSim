@@ -40,7 +40,7 @@ public static class DefaultDinerKitchenLayoutSeed
     public static HeatLamp CreateHeatLamp() => new()
     {
         HeatLampId = 1,
-        Position = new GridPosition(1, 4),
+        Position = new GridPosition(4, 4),
         Hitbox = new GridBounds(1, 1),
         SlotCount = 3, // presets.md — explicitly given
         QualityDecayRatePerTick = 1.0f // NOT given in presets.md either — first-pass proposed default
