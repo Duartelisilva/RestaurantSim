@@ -94,7 +94,8 @@ public class SpawnArrivalCommandHandlerTests
         restaurant.CustomerService.Queue.Should().HaveCount(1); // unchanged — new group turned away
         restaurant.Reputation.Should().BeLessThan(reputationBefore);
         await _publisher.Received(1).Publish(
-            Arg.Any<RestaurantSim.Domain.DomainEvents.GroupTurnedAway>(), Arg.Any<CancellationToken>());
+            Arg.Is<RestaurantSim.Domain.DomainEvents.GroupTurnedAway>(e => e.ReputationAfter == restaurant.Reputation),
+            Arg.Any<CancellationToken>());
     }
 
     [Fact]

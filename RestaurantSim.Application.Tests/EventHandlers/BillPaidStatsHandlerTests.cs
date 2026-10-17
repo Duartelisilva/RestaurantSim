@@ -24,7 +24,7 @@ public class BillPaidStatsHandlerTests
         var restaurant = BuildRestaurant();
         _repository.GetAsync(restaurant.RestaurantId, Arg.Any<CancellationToken>()).Returns(restaurant);
 
-        await _handler.Handle(new BillPaid(restaurant.RestaurantId, GroupId: 1, OrderId: 1, Revenue: 25.50m, TipAmount: 5m, Tick: 100), CancellationToken.None);
+        await _handler.Handle(new BillPaid(restaurant.RestaurantId, GroupId: 1, OrderId: 1, Revenue: 25.50m, TipAmount: 5m, CashAfter: 0m, Tick: 100), CancellationToken.None);
 
         restaurant.DailyStats.Revenue.Should().Be(25.50m);
         await _repository.Received(1).SaveAsync(restaurant, Arg.Any<CancellationToken>());
@@ -36,8 +36,8 @@ public class BillPaidStatsHandlerTests
         var restaurant = BuildRestaurant();
         _repository.GetAsync(restaurant.RestaurantId, Arg.Any<CancellationToken>()).Returns(restaurant);
 
-        await _handler.Handle(new BillPaid(restaurant.RestaurantId, 1, 1, 25.50m, 5m, 100), CancellationToken.None);
-        await _handler.Handle(new BillPaid(restaurant.RestaurantId, 2, 2, 40m, 8m, 150), CancellationToken.None);
+        await _handler.Handle(new BillPaid(restaurant.RestaurantId, 1, 1, 25.50m, 5m, 0m, 100), CancellationToken.None);
+        await _handler.Handle(new BillPaid(restaurant.RestaurantId, 2, 2, 40m, 8m, 0m, 150), CancellationToken.None);
 
         restaurant.DailyStats.Revenue.Should().Be(65.50m);
     }
@@ -47,7 +47,7 @@ public class BillPaidStatsHandlerTests
     {
         _repository.GetAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns((Restaurant?)null);
 
-        var act = async () => await _handler.Handle(new BillPaid(Guid.NewGuid(), 1, 1, 25m, 5m, 100), CancellationToken.None);
+        var act = async () => await _handler.Handle(new BillPaid(Guid.NewGuid(), 1, 1, 25m, 5m, 0m, 100), CancellationToken.None);
 
         await act.Should().NotThrowAsync();
     }

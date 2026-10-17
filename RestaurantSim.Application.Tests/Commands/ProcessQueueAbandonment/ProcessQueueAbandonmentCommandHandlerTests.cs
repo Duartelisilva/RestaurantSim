@@ -35,7 +35,9 @@ public class ProcessQueueAbandonmentCommandHandlerTests
 
         result.IsSuccess.Should().BeTrue();
         restaurant.CustomerService.Queue.Should().NotContain(group);
-        await _publisher.Received(1).Publish(Arg.Any<GroupAbandonedQueue>(), Arg.Any<CancellationToken>());
+        await _publisher.Received(1).Publish(
+            Arg.Is<GroupAbandonedQueue>(e => e.GroupId == group.GroupId && e.ReputationAfter == restaurant.Reputation),
+            Arg.Any<CancellationToken>());
     }
 
     [Fact]

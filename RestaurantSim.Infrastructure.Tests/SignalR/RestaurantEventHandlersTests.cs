@@ -34,9 +34,29 @@ public sealed class RestaurantEventHandlersTests
     {
         var handler = new GroupAbandonedQueueNotificationHandler(_hubContext);
 
-        await handler.Handle(new GroupAbandonedQueue(_restaurantId, 4, 60), CancellationToken.None);
+        await handler.Handle(new GroupAbandonedQueue(_restaurantId, 4, 19.5f, 60), CancellationToken.None);
 
-        await AssertSent(ClientEventNames.GroupAbandonedQueue, new GroupAbandonedQueueDto(4, 60));
+        await AssertSent(ClientEventNames.GroupAbandonedQueue, new GroupAbandonedQueueDto(4, 19.5f, 60));
+    }
+
+    [Fact]
+    public async Task GroupTurnedAway_SendsDtoWithAbsoluteReputation()
+    {
+        var handler = new GroupTurnedAwayNotificationHandler(_hubContext);
+
+        await handler.Handle(new GroupTurnedAway(_restaurantId, 19.8f, 55), CancellationToken.None);
+
+        await AssertSent(ClientEventNames.GroupTurnedAway, new GroupTurnedAwayDto(19.8f, 55));
+    }
+
+    [Fact]
+    public async Task BillPaid_SendsDtoWithAbsoluteCash()
+    {
+        var handler = new BillPaidNotificationHandler(_hubContext);
+
+        await handler.Handle(new BillPaid(_restaurantId, 4, 9, 12.50m, 3.10m, 5012.50m, 220), CancellationToken.None);
+
+        await AssertSent(ClientEventNames.BillPaid, new BillPaidDto(4, 12.50m, 3.10m, 5012.50m, 220));
     }
 
     [Fact]

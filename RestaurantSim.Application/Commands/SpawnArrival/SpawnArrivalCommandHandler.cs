@@ -58,8 +58,7 @@ public sealed class SpawnArrivalCommandHandler : IRequestHandler<SpawnArrivalCom
                 restaurant.SimulationTick + ComputeIntervalTicks(config, restaurant, activePeriod);
 
             await _repository.SaveAsync(restaurant, cancellationToken);
-            await _publisher.Publish(new GroupTurnedAway(restaurant.RestaurantId, restaurant.SimulationTick), cancellationToken);
-            return Result.Success();
+            await _publisher.Publish(new GroupTurnedAway(restaurant.RestaurantId, restaurant.Reputation, restaurant.SimulationTick), cancellationToken); return Result.Success();
         }
 
         var groupId = restaurant.CustomerService.NextGroupId++;

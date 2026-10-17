@@ -62,7 +62,7 @@ public sealed class ProcessQueueAbandonmentCommandHandler : IRequestHandler<Proc
             restaurant.CustomerService.Queue.Remove(group);
             restaurant.Reputation = MathF.Max(0, restaurant.Reputation - ReputationPenaltyPerAbandonment);
 
-            abandonedEvents.Add(new GroupAbandonedQueue(restaurant.RestaurantId, group.GroupId, restaurant.SimulationTick));
+            abandonedEvents.Add(new GroupAbandonedQueue(restaurant.RestaurantId, group.GroupId, restaurant.Reputation, restaurant.SimulationTick));
         }
 
         if (abandonedEvents.Count == 0)

@@ -78,7 +78,7 @@ public sealed class PayBillCommandHandler : IRequestHandler<PayBillCommand, Resu
         await _repository.SaveAsync(restaurant, cancellationToken);
 
         await _publisher.Publish(
-            new BillPaid(restaurant.RestaurantId, group.GroupId, order.OrderId, orderTotal, tipAmount, restaurant.SimulationTick),
+            new BillPaid(restaurant.RestaurantId, group.GroupId, order.OrderId, orderTotal, tipAmount, restaurant.Cash, restaurant.SimulationTick),
             cancellationToken);
 
         return Result.Success();

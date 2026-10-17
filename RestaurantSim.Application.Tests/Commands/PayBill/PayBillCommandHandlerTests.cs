@@ -40,7 +40,7 @@ public class PayBillCommandHandlerTests
         restaurant.Cash.Should().Be(cashBefore + 12.50m); // order total added, tip NOT added to cash
 
         await _publisher.Received(1).Publish(
-            Arg.Is<BillPaid>(e => e.Revenue == 12.50m && e.GroupId == group.GroupId),
+            Arg.Is<BillPaid>(e => e.Revenue == 12.50m && e.GroupId == group.GroupId && e.CashAfter == cashBefore + 12.50m),
             Arg.Any<CancellationToken>());
     }
 

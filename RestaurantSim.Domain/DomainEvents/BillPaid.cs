@@ -12,4 +12,5 @@ public sealed record BillPaid(
     int OrderId,
     decimal Revenue,
     decimal TipAmount,
+    decimal CashAfter,
     long Tick) : INotification;
