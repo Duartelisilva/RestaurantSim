@@ -23,7 +23,7 @@
         }
         @foreach (var t in s.Floor.Tables)
         {
-            @Box("table state-" + StateOf(s.Floor, t).ToLowerInvariant(), t.Position, t.Size, $"T{t.TableId}")
+            @Box("table state-" + StateOf(s.Floor, t).ToLowerInvariant(), t.Position, t.Size, $"T{t.TableId}", FloorLabels.Occupancy(s, t))
         }
     </svg>
 }
@@ -35,9 +35,10 @@
     public RestaurantSnapshotDto? Snapshot { get; set; }
 
     // Assumes Position is the top-left cell of the hitbox, Y growing downwards.
-    private RenderFragment Box(string css, GridPointDto pos, GridSizeDto size, string label) => @<g>
+    private RenderFragment Box(string css, GridPointDto pos, GridSizeDto size, string label, string? detail = null) => @<g>
         <rect class="@css" x="@(pos.X * Cell)" y="@(pos.Y * Cell)" width="@(size.Width * Cell)" height="@(size.Height * Cell)" />
         <text x="@(pos.X * Cell + 4)" y="@(pos.Y * Cell + 14)">@label</text>
+        <text x="@(pos.X * Cell + 4)" y="@(pos.Y * Cell + 30)" font-weight="600">@detail</text>
     </g>;
 
     private static string StateOf(FloorDto floor, TableDto table)
