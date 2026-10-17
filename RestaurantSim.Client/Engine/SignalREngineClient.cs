@@ -21,21 +21,30 @@ public sealed class SignalREngineClient : IEngineClient
         _connection.On<GroupSeatedDto>(ClientEventNames.GroupSeated, dto => GroupSeated?.Invoke(dto));
         _connection.On<GroupLeftDto>(ClientEventNames.GroupLeft, dto => GroupLeft?.Invoke(dto));
         _connection.On<TableCleanedDto>(ClientEventNames.TableCleaned, dto => TableCleaned?.Invoke(dto));
+
+        // Handlers only raise our event and return; anything slow (rejoining,
+        // refetching) is the consumer's job and must not block SignalR's reconnect path.
+        _connection.Reconnecting += _ => Raise(ConnectionState.Reconnecting);
+        _connection.Reconnected += _ => Raise(ConnectionState.Connected);
+        _connection.Closed += _ => Raise(ConnectionState.Disconnected);
     }
 
     public bool IsConnected => _connection.State == HubConnectionState.Connected;
 
+    public event Action<ConnectionState>? ConnectionStateChanged;
     public event Action<GroupArrivedDto>? GroupArrived;
     public event Action<GroupAbandonedQueueDto>? GroupAbandonedQueue;
     public event Action<GroupSeatedDto>? GroupSeated;
     public event Action<GroupLeftDto>? GroupLeft;
     public event Action<TableCleanedDto>? TableCleaned;
 
-    public Task ConnectAsync(CancellationToken cancellationToken = default)
+    public async Task ConnectAsync(CancellationToken cancellationToken = default)
     {
-        return _connection.State == HubConnectionState.Disconnected
-            ? _connection.StartAsync(cancellationToken)
-            : Task.CompletedTask;
+        if (_connection.State != HubConnectionState.Disconnected)
+            return;
+
+        await _connection.StartAsync(cancellationToken);
+        ConnectionStateChanged?.Invoke(ConnectionState.Connected);
     }
 
     public Task<HubResult<Guid>> CreateRestaurantAsync(string configId, CancellationToken cancellationToken = default)
@@ -57,4 +66,10 @@ public sealed class SignalREngineClient : IEngineClient
     }
 
     public ValueTask DisposeAsync() => _connection.DisposeAsync();
+
+    private Task Raise(ConnectionState state)
+    {
+        ConnectionStateChanged?.Invoke(state);
+        return Task.CompletedTask;
+    }
 }

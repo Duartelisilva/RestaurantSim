@@ -1,17 +1,22 @@
 @page "/"
 @implements IDisposable
-@inject IEngineClient Engine
+@inject EngineSession Session
 @inject RestaurantStore Store
 
 <h1>RestaurantSim</h1>
 
-<p>Status: @_status</p>
+<p>Status: @Session.Status</p>
 
-<button @onclick="StartAsync" disabled="@_started">Connect &amp; start default_diner</button>
+<button @onclick="StartAsync" disabled="@Session.IsStarted">Connect &amp; start default_diner</button>
 
-@if (Store.Snapshot is { } snapshot && _clock is not null)
+@if (Session.CanReconnect)
 {
-    <p>In-game time: @_clock.TimeOfDay(DateTimeOffset.UtcNow).ToString("HH:mm")</p>
+    <button @onclick="Session.ReconnectAsync">Reconnect</button>
+}
+
+@if (Store.Snapshot is { } snapshot && Session.Clock is { } clock)
+{
+    <p>In-game time: @clock.TimeOfDay(DateTimeOffset.UtcNow).ToString("HH:mm")</p>
 
     <div class="floor-layout">
         <FloorView Snapshot="snapshot" />
@@ -35,7 +40,7 @@
 
             <h3>Live events</h3>
             <ul>
-                @foreach (var line in _log)
+                @foreach (var line in Session.Log)
                 {
                     <li>@line</li>
                 }
@@ -45,105 +50,27 @@
 }
 
 @code {
-    private string _status = "Not connected";
-    private bool _started;
-    private GameClock? _clock;
     private System.Threading.Timer? _timer;
-    private readonly List<string> _log = new();
 
     protected override void OnInitialized()
     {
-        Engine.GroupArrived += OnGroupArrived;
-        Engine.GroupAbandonedQueue += OnGroupAbandonedQueue;
-        Engine.GroupSeated += OnGroupSeated;
-        Engine.GroupLeft += OnGroupLeft;
-        Engine.TableCleaned += OnTableCleaned;
-        Store.Changed += OnStoreChanged;
+        Session.Changed += OnSessionChanged;
+
+        // Re-render once a second so the extrapolated in-game clock keeps moving.
+        _timer = new System.Threading.Timer(
+            _ => InvokeAsync(StateHasChanged), null, TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(1));
     }
 
-    private async Task StartAsync()
-    {
-        _started = true;
+    private Task StartAsync() => Session.StartAsync("default_diner");
 
-        try
-        {
-            await Engine.ConnectAsync();
-            _status = "Connected, creating restaurant...";
-
-            var created = await Engine.CreateRestaurantAsync("default_diner");
-            if (!created.Succeeded)
-            {
-                _status = $"Create failed: {created.Error}";
-                _started = false;
-                return;
-            }
-
-            var joined = await Engine.JoinRestaurantAsync(created.Value);
-            if (joined is { Succeeded: true, Value: { } snapshot })
-            {
-                _clock = new GameClock(
-                    snapshot.SimulationTick, snapshot.MinutesPerTick, snapshot.TicksPerRealSecond, DateTimeOffset.UtcNow);
-                _timer = new System.Threading.Timer(
-                    _ => InvokeAsync(StateHasChanged), null, TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(1));
-                Store.Load(snapshot);
-                _status = "Joined";
-            }
-            else
-            {
-                _status = $"Join failed: {joined.Error}";
-                _started = false;
-            }
-        }
-        catch (Exception ex)
-        {
-            _status = $"Error: {ex.Message}";
-            _started = false;
-        }
-    }
-
-    private void OnGroupArrived(GroupArrivedDto dto)
-    {
-        if (Store.Apply(dto))
-            _log.Add($"[tick {dto.Tick}] group {dto.GroupId} arrived (party of {dto.PartySize})");
-    }
-
-    private void OnGroupAbandonedQueue(GroupAbandonedQueueDto dto)
-    {
-        if (Store.Apply(dto))
-            _log.Add($"[tick {dto.Tick}] group {dto.GroupId} left the queue");
-    }
-
-    private void OnGroupSeated(GroupSeatedDto dto)
-    {
-        if (Store.Apply(dto))
-            _log.Add($"[tick {dto.Tick}] group {dto.GroupId} seated at cluster {dto.ClusterId}");
-    }
-
-    private void OnGroupLeft(GroupLeftDto dto)
-    {
-        if (Store.Apply(dto))
-            _log.Add($"[tick {dto.Tick}] group {dto.GroupId} left cluster {dto.ClusterId}");
-    }
-
-    private void OnTableCleaned(TableCleanedDto dto)
-    {
-        if (Store.Apply(dto))
-            _log.Add($"[tick {dto.Tick}] table {dto.TableId} cleaned");
-    }
-
-    private void OnStoreChanged()
+    private void OnSessionChanged()
     {
         InvokeAsync(StateHasChanged);
     }
 
     public void Dispose()
     {
-        Engine.GroupArrived -= OnGroupArrived;
-        Engine.GroupAbandonedQueue -= OnGroupAbandonedQueue;
-        Engine.GroupSeated -= OnGroupSeated;
-        Engine.GroupLeft -= OnGroupLeft;
-        Engine.TableCleaned -= OnTableCleaned;
-        Store.Changed -= OnStoreChanged;
+        Session.Changed -= OnSessionChanged;
         _timer?.Dispose();
     }
 }

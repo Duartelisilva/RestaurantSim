@@ -10,6 +10,11 @@ public interface IEngineClient : IAsyncDisposable
 {
     bool IsConnected { get; }
 
+    // Raised on every transport state change (including the initial connect).
+    // After a drop and recovery the engine may have forgotten this client's
+    // group membership — consumers must rejoin and refetch the snapshot.
+    event Action<ConnectionState>? ConnectionStateChanged;
+
     event Action<GroupArrivedDto>? GroupArrived;
     event Action<GroupAbandonedQueueDto>? GroupAbandonedQueue;
     event Action<GroupSeatedDto>? GroupSeated;

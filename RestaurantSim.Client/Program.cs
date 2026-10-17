@@ -13,5 +13,6 @@ var hubUrl = builder.Configuration["EngineHubUrl"]
 // engine; an in-process engine for Android could replace it without UI changes.
 builder.Services.AddSingleton<IEngineClient>(_ => new SignalREngineClient(hubUrl));
 builder.Services.AddSingleton<RestaurantStore>();
+builder.Services.AddSingleton<EngineSession>();
 
 await builder.Build().RunAsync();
