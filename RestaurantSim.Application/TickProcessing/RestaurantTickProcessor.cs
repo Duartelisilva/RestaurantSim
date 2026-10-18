@@ -10,6 +10,7 @@ using RestaurantSim.Application.Commands.ProcessQueueAbandonment;
 using RestaurantSim.Application.Commands.SpawnArrival;
 using RestaurantSim.Application.Commands.SpreadGroupMood;
 using RestaurantSim.Application.Common;
+using RestaurantSim.Domain;
 using RestaurantSim.Domain.Abstractions;
 
 namespace RestaurantSim.Application.TickProcessing;
@@ -39,28 +40,36 @@ public sealed class RestaurantTickProcessor
 
         foreach (var restaurant in restaurants)
         {
-            restaurant.SimulationTick++;
-
-            if (restaurant.Floor.Clusters.Count > 0)
-            {
-                var occupiedFraction = restaurant.Floor.Clusters.Count(c => c.OccupiedBy != null) / (float)restaurant.Floor.Clusters.Count;
-                restaurant.DailyStats.TableOccupancySampleSum += occupiedFraction;
-                restaurant.DailyStats.TableOccupancySampleCount++;
-            }
-
-            await _repository.SaveAsync(restaurant, cancellationToken);
-
-            await TryDispatchAsync(new AdvanceKitchenCommand(restaurant.RestaurantId), restaurant.RestaurantId, cancellationToken);
-            await TryDispatchAsync(new SpawnArrivalCommand(restaurant.RestaurantId), restaurant.RestaurantId, cancellationToken);
-            await TryDispatchAsync(new AdvanceCleaningProgressCommand(restaurant.RestaurantId), restaurant.RestaurantId, cancellationToken);
-            await TryDispatchAsync(new AdvanceMoodCommand(restaurant.RestaurantId), restaurant.RestaurantId, cancellationToken);
-            await TryDispatchAsync(new AdvanceStaffShiftCommand(restaurant.RestaurantId), restaurant.RestaurantId, cancellationToken);
-            await TryDispatchAsync(new SpreadGroupMoodCommand(restaurant.RestaurantId), restaurant.RestaurantId, cancellationToken);
-            await TryDispatchAsync(new ProcessQueueAbandonmentCommand(restaurant.RestaurantId), restaurant.RestaurantId, cancellationToken);
-            await TryDispatchAsync(new EndDayCommand(restaurant.RestaurantId), restaurant.RestaurantId, cancellationToken);
-
-            await TryRunAutoManagerAsync(restaurant.RestaurantId, cancellationToken);
+            await AdvanceRestaurantAsync(restaurant, cancellationToken);
         }
+    }
+
+    // Advances ONE restaurant by exactly one tick (locked intra-tick order,
+    // architecture doc §2a), then runs its AutoManager pass. The hosting loop
+    // decides *when* a restaurant is due (per-restaurant TicksPerRealSecond).
+    public async Task AdvanceRestaurantAsync(Restaurant restaurant, CancellationToken cancellationToken)
+    {
+        restaurant.SimulationTick++;
+
+        if (restaurant.Floor.Clusters.Count > 0)
+        {
+            var occupiedFraction = restaurant.Floor.Clusters.Count(c => c.OccupiedBy != null) / (float)restaurant.Floor.Clusters.Count;
+            restaurant.DailyStats.TableOccupancySampleSum += occupiedFraction;
+            restaurant.DailyStats.TableOccupancySampleCount++;
+        }
+
+        await _repository.SaveAsync(restaurant, cancellationToken);
+
+        await TryDispatchAsync(new AdvanceKitchenCommand(restaurant.RestaurantId), restaurant.RestaurantId, cancellationToken);
+        await TryDispatchAsync(new SpawnArrivalCommand(restaurant.RestaurantId), restaurant.RestaurantId, cancellationToken);
+        await TryDispatchAsync(new AdvanceCleaningProgressCommand(restaurant.RestaurantId), restaurant.RestaurantId, cancellationToken);
+        await TryDispatchAsync(new AdvanceMoodCommand(restaurant.RestaurantId), restaurant.RestaurantId, cancellationToken);
+        await TryDispatchAsync(new AdvanceStaffShiftCommand(restaurant.RestaurantId), restaurant.RestaurantId, cancellationToken);
+        await TryDispatchAsync(new SpreadGroupMoodCommand(restaurant.RestaurantId), restaurant.RestaurantId, cancellationToken);
+        await TryDispatchAsync(new ProcessQueueAbandonmentCommand(restaurant.RestaurantId), restaurant.RestaurantId, cancellationToken);
+        await TryDispatchAsync(new EndDayCommand(restaurant.RestaurantId), restaurant.RestaurantId, cancellationToken);
+
+        await TryRunAutoManagerAsync(restaurant.RestaurantId, cancellationToken);
     }
 
     private async Task TryDispatchAsync<TCommand>(TCommand command, Guid restaurantId, CancellationToken cancellationToken)
