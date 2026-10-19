@@ -1,4 +1,4 @@
-using RestaurantSim.Domain.Floor;
+﻿using RestaurantSim.Domain.Floor;
 
 namespace RestaurantSim.Infrastructure.Presets;
 
@@ -43,6 +43,6 @@ public static class DefaultDinerKitchenLayoutSeed
         Position = new GridPosition(4, 4),
         Hitbox = new GridBounds(1, 1),
         SlotCount = 3, // presets.md — explicitly given
-        QualityDecayRatePerTick = 1.0f // NOT given in presets.md either — first-pass proposed default
+        QualityDecayRatePerSecond = 1.0f // NOT given in presets.md either — first-pass proposed default
     };
 }

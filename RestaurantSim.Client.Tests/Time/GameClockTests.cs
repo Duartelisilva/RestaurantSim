@@ -36,6 +36,15 @@ public class GameClockTests
     }
 
     [Fact]
+    public void TimeOfDay_AtAHigherTickRate_KeepsTheSameGamePace()
+    {
+        // 4 ticks per real second at 0.25 game minutes per tick = 1 game minute per second.
+        var clock = new GameClock(0, 0.25, 4, T0);
+
+        clock.TimeOfDay(T0.AddSeconds(240)).Should().Be(new TimeOnly(4, 0));
+    }
+
+    [Fact]
     public void EstimatedTick_NeverGoesBackwards_WhenNowIsBeforeReceipt()
     {
         var clock = new GameClock(100, 1, 1, T0);

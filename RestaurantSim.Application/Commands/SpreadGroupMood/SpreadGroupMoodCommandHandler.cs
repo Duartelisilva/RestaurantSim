@@ -1,24 +1,30 @@
 using MediatR;
 using RestaurantSim.Application.Common;
+using RestaurantSim.Domain;
 using RestaurantSim.Domain.Abstractions;
 using RestaurantSim.Domain.CustomerService;
+using RestaurantSim.Domain.Scheduling;
 
 namespace RestaurantSim.Application.Commands.SpreadGroupMood;
 
 public sealed class SpreadGroupMoodCommandHandler : IRequestHandler<SpreadGroupMoodCommand, Result>
 {
-    // mechanics doc §4 — locked constants, not tunable config fields.
-    private const float NormalSpreadRate = 0.05f;
-    private const float TippingPointSpreadRate = 0.075f;
+    // mechanics doc §4 — locked constants, not tunable config fields. Expressed per
+    // REAL SECOND (applied per tick as rate / TicksPerRealSecond), so the tick rate
+    // never changes how fast Mood spreads in real time.
+    private const float NormalSpreadRatePerSecond = 0.05f;
+    private const float TippingPointSpreadRatePerSecond = 0.075f;
     private const float TippingPointMoodThreshold = 30f;
     private const float AdultInfluenceWeight = 1.5f;
     private const float ChildInfluenceWeight = 1.0f;
 
     private readonly IRestaurantRepository _repository;
+    private readonly IPresetRepository<RestaurantConfig> _presetRepository;
 
-    public SpreadGroupMoodCommandHandler(IRestaurantRepository repository)
+    public SpreadGroupMoodCommandHandler(IRestaurantRepository repository, IPresetRepository<RestaurantConfig> presetRepository)
     {
         _repository = repository;
+        _presetRepository = presetRepository;
     }
 
     public async Task<Result> Handle(SpreadGroupMoodCommand request, CancellationToken cancellationToken)
@@ -27,6 +33,10 @@ public sealed class SpreadGroupMoodCommandHandler : IRequestHandler<SpreadGroupM
         if (restaurant is null)
             return Result.Failure($"Restaurant {request.RestaurantId} does not exist.");
 
+        var config = await _presetRepository.GetAsync(restaurant.ConfigId, cancellationToken);
+        if (config is null)
+            return Result.Failure($"RestaurantConfig '{restaurant.ConfigId}' does not exist.");
+
         // Applied to both queued and seated groups — the doc doesn't restrict
         // this to seated-only, and it's realistic that people waiting together
         // in line still affect each other's mood. IsPresentAtTable is always
@@ -34,12 +44,12 @@ public sealed class SpreadGroupMoodCommandHandler : IRequestHandler<SpreadGroupM
         // the same presence filter works uniformly for both collections.
         foreach (var group in restaurant.CustomerService.Queue)
         {
-            ApplySpread(group);
+            ApplySpread(group, config.TicksPerRealSecond);
         }
 
         foreach (var group in restaurant.CustomerService.ActiveGroups)
         {
-            ApplySpread(group);
+            ApplySpread(group, config.TicksPerRealSecond);
         }
 
         await _repository.SaveAsync(restaurant, cancellationToken);
@@ -47,7 +57,7 @@ public sealed class SpreadGroupMoodCommandHandler : IRequestHandler<SpreadGroupM
         return Result.Success();
     }
 
-    private static void ApplySpread(CustomerGroup group)
+    private static void ApplySpread(CustomerGroup group, int ticksPerRealSecond)
     {
         var presentMembers = group.Members.Where(m => m.IsPresentAtTable).ToList();
         if (presentMembers.Count < 2) return; // no spread possible with 0 or 1 present member
@@ -62,7 +72,9 @@ public sealed class SpreadGroupMoodCommandHandler : IRequestHandler<SpreadGroupM
         // present members only (absent members are frozen, not "in the room"
         // contributing to atmosphere). Not explicitly disambiguated in the doc.
         var fullGroupAvgMood = moodSnapshot.Values.Average();
-        var spreadRate = fullGroupAvgMood < TippingPointMoodThreshold ? TippingPointSpreadRate : NormalSpreadRate;
+        var spreadRate = TickRates.PerTick(
+            fullGroupAvgMood < TippingPointMoodThreshold ? TippingPointSpreadRatePerSecond : NormalSpreadRatePerSecond,
+            ticksPerRealSecond);
 
         var deltas = new Dictionary<int, float>();
         foreach (var member in presentMembers)

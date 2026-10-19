@@ -14,8 +14,10 @@ public sealed class AdvanceStaffShiftCommandHandler : IRequestHandler<AdvanceSta
     // Kitchen's, which had worked examples). Derived from a stated design
     // intent instead of guessed: "a staff member should reach roughly full
     // Fatigue (1.0) by the end of a typical 12-hour shift" ->
-    // 1 / (12 hours x 3600 sec) ticks at TicksPerRealSecond=1.
-    private const float DefaultBaseFatigueAccrualRate = 1f / (12f * 3600f);
+    // 1 / (12 hours x 3600 sec), now expressed PER REAL SECOND (applied per tick as
+    // rate / TicksPerRealSecond). Unit question still open: 12 real hours vs 12
+    // in-game hours - see mechanics doc section 13a.
+    private const float DefaultBaseFatigueAccrualPerSecond = 1f / (12f * 3600f);
     private const float DefaultOvertimeFatigueMultiplier = 2.0f; // confirmed in chat: overtime is more tiring, not less
 
     private readonly IRestaurantRepository _repository;
@@ -37,7 +39,8 @@ public sealed class AdvanceStaffShiftCommandHandler : IRequestHandler<AdvanceSta
         if (config is null)
             return Result.Failure($"RestaurantConfig '{restaurant.ConfigId}' does not exist.");
 
-        var baseFatigueAccrualRate = config.BaseFatigueAccrualRate ?? DefaultBaseFatigueAccrualRate;
+        var fatigueAccrualPerTick = TickRates.PerTick(
+            config.BaseFatigueAccrualPerSecond ?? DefaultBaseFatigueAccrualPerSecond, config.TicksPerRealSecond);
         var overtimeFatigueMultiplier = config.OvertimeFatigueMultiplier ?? DefaultOvertimeFatigueMultiplier;
         var minutesIntoDay = MealPeriodCalculator.MinutesIntoDay(config.MinutesPerTick, restaurant.SimulationTick);
 
@@ -75,8 +78,8 @@ public sealed class AdvanceStaffShiftCommandHandler : IRequestHandler<AdvanceSta
             if (staff.State == StaffState.OffShift) continue; // no accrual while off
 
             var fatigueDelta = isHeldOvertime
-                ? baseFatigueAccrualRate * overtimeFatigueMultiplier
-                : baseFatigueAccrualRate;
+                ? fatigueAccrualPerTick * overtimeFatigueMultiplier
+                : fatigueAccrualPerTick;
 
             var currentFatigue = staff.Stats.Get(StatType.Fatigue);
             staff.Stats.Set(StatType.Fatigue, Math.Clamp(currentFatigue + fatigueDelta, 0, 1));

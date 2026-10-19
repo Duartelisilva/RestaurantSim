@@ -12,10 +12,16 @@ public sealed class RestaurantConfig
 {
     public required string ConfigId { get; init; }
     public required decimal StartingCash { get; init; }
-    public required int MinutesPerTick { get; init; }
+
+    // In-game minutes that pass per real-world second — the game's perceived pace.
+    // Independent of the tick rate: raising TicksPerRealSecond never speeds the clock up.
+    public required double GameMinutesPerRealSecond { get; init; }
 
     // Ticks executed per real-world second (mechanics doc §14).
     public required int TicksPerRealSecond { get; init; }
+
+    // Derived: in-game minutes one tick represents.
+    public double MinutesPerTick => GameMinutesPerRealSecond / Math.Max(1, TicksPerRealSecond);
 
     public required string TableLayoutId { get; init; }
     public required IReadOnlyList<(StaffRole Role, int Count)> StaffRosterSeed { get; init; }
@@ -25,9 +31,9 @@ public sealed class RestaurantConfig
     // Defaults to 1.0 (no change vs base curve) if left unset — mechanics doc §2.
     public float? PatienceDecayBaseline { get; init; }
 
-    public required float QueueWaitMoodDecayRate { get; init; }
-    public required float CourseWaitMoodDecayRate { get; init; }
-    public required float NaturalMoodRecoveryRate { get; init; }
+    public required float QueueWaitMoodDecayPerSecond { get; init; }
+    public required float CourseWaitMoodDecayPerSecond { get; init; }
+    public required float NaturalMoodRecoveryPerSecond { get; init; }
     public required float ProbabilityCheckpointIntervalSeconds { get; init; }
     public required float PathReplanMaxWaitSeconds { get; init; }
     public required int MaxCallAttempts { get; init; }
@@ -39,7 +45,7 @@ public sealed class RestaurantConfig
     // New — confirmed in chat, mechanics doc §13a's formula gap. Nullable, with
     // code-level fallback defaults (derived from "~1.0 fatigue by end of a
     // 12-hour shift" and "overtime is 2x more tiring") if left unset here.
-    public float? BaseFatigueAccrualRate { get; init; }
+    public float? BaseFatigueAccrualPerSecond { get; init; }
     public float? OvertimeFatigueMultiplier { get; init; }
 
     // Which ISimulationModules are active for this restaurant.

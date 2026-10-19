@@ -2,19 +2,19 @@ namespace RestaurantSim.Client.Time;
 
 // Extrapolates the in-game time of day from a snapshot. Ticks are never pushed
 // per tick (architecture doc §3), so the client counts forward from the tick the
-// snapshot was taken at. Known limit: the server tick loop currently runs at a
-// fixed 1 tick/second regardless of TicksPerRealSecond, so this is exact only
-// while TicksPerRealSecond == 1.
+// snapshot was taken at. The server paces ticks by TicksPerRealSecond, and
+// MinutesPerTick is derived from the game pace, so this stays correct at any
+// tick rate.
 public sealed class GameClock
 {
     private const int MinutesPerDay = 1440;
 
     private readonly long _snapshotTick;
-    private readonly int _minutesPerTick;
+    private readonly double _minutesPerTick;
     private readonly int _ticksPerRealSecond;
     private readonly DateTimeOffset _receivedAt;
 
-    public GameClock(long snapshotTick, int minutesPerTick, int ticksPerRealSecond, DateTimeOffset receivedAt)
+    public GameClock(long snapshotTick, double minutesPerTick, int ticksPerRealSecond, DateTimeOffset receivedAt)
     {
         _snapshotTick = snapshotTick;
         _minutesPerTick = minutesPerTick;

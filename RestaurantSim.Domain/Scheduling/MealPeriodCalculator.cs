@@ -7,7 +7,7 @@ namespace RestaurantSim.Domain.Scheduling;
 public static class MealPeriodCalculator
 {
     public static MealPeriodDefinition? FindActive(
-        IReadOnlyList<MealPeriodDefinition> activePeriods, int minutesPerTick, long currentTick)
+        IReadOnlyList<MealPeriodDefinition> activePeriods, double minutesPerTick, long currentTick)
     {
         var minutesIntoDay = MinutesIntoDay(minutesPerTick, currentTick);
 
@@ -21,7 +21,7 @@ public static class MealPeriodCalculator
         return null;
     }
 
-    public static double MinutesIntoDay(int minutesPerTick, long currentTick)
+    public static double MinutesIntoDay(double minutesPerTick, long currentTick)
     {
         var ticksPerDay = (long)Math.Round(1440.0 / minutesPerTick);
         var timeOfDayTicks = currentTick % ticksPerDay;
@@ -53,12 +53,12 @@ public static class MealPeriodCalculator
     // Opening, clamped to the start of day (so the lead is "at most" leadMinutes).
     // A negative lead is treated as 0; no active periods means tick 0.
     public static long InitialTick(
-        IReadOnlyList<MealPeriodDefinition> activePeriods, int minutesPerTick, int leadMinutes)
+        IReadOnlyList<MealPeriodDefinition> activePeriods, double minutesPerTick, int leadMinutes)
     {
         if (activePeriods.Count == 0)
             return 0;
 
         var startMinutes = Math.Max(0, OpeningMinutes(activePeriods) - Math.Max(0, leadMinutes));
-        return (long)Math.Round(startMinutes / (double)minutesPerTick);
+        return (long)Math.Round(startMinutes / minutesPerTick);
     }
 }

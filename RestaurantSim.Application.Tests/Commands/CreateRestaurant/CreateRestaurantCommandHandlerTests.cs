@@ -1,4 +1,4 @@
-using FluentAssertions;
+﻿using FluentAssertions;
 using NSubstitute;
 using RestaurantSim.Application.Commands.CreateRestaurant;
 using RestaurantSim.Domain;
@@ -131,15 +131,15 @@ public class CreateRestaurantCommandHandlerTests
     {
         ConfigId = "default_diner",
         StartingCash = 5000m,
-        MinutesPerTick = 1,
+        GameMinutesPerRealSecond = 1,
         TicksPerRealSecond = 1,
         TableLayoutId = "default_diner_layout",
         StaffRosterSeed = new (StaffRole, int)[] { (StaffRole.Host, 1), (StaffRole.Waiter, 2) },
         MenuItemIds = Array.Empty<int>(),
         ReputationStart = 20f,
-        QueueWaitMoodDecayRate = -0.4f,
-        CourseWaitMoodDecayRate = -0.3f,
-        NaturalMoodRecoveryRate = 0.5f,
+        QueueWaitMoodDecayPerSecond = -0.4f,
+        CourseWaitMoodDecayPerSecond = -0.3f,
+        NaturalMoodRecoveryPerSecond = 0.5f,
         ProbabilityCheckpointIntervalSeconds = 3f,
         PathReplanMaxWaitSeconds = 5f,
         MaxCallAttempts = 3,
@@ -165,7 +165,7 @@ public class CreateRestaurantCommandHandlerTests
         var cluster = new TableCluster { ClusterId = 1, TableIds = new List<int> { 1 }, Capacity = 2 };
         var stationType = new KitchenStationType { StationTypeId = "grill", Capacity = 2, SpeedMultiplier = 1.0f };
         var station = new KitchenStation { StationId = 1, Position = new GridPosition(2, 0), Hitbox = new GridBounds(1, 1), StationType = stationType };
-        var heatLamp = new HeatLamp { HeatLampId = 1, Position = new GridPosition(3, 0), Hitbox = new GridBounds(1, 1), SlotCount = 3, QualityDecayRatePerTick = 1f };
+        var heatLamp = new HeatLamp { HeatLampId = 1, Position = new GridPosition(3, 0), Hitbox = new GridBounds(1, 1), SlotCount = 3, QualityDecayRatePerSecond = 1f };
         var freezer = new Freezer { FreezerId = 1, Position = new GridPosition(4, 0), Hitbox = new GridBounds(1, 1) };
         var bathrooms = new List<Bathroom>
         {

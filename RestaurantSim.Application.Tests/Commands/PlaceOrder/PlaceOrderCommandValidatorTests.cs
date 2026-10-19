@@ -1,4 +1,4 @@
-using FluentAssertions;
+﻿using FluentAssertions;
 using NSubstitute;
 using RestaurantSim.Application.Commands.PlaceOrder;
 using RestaurantSim.Domain;
@@ -198,15 +198,15 @@ public class PlaceOrderCommandValidatorTests
         {
             ConfigId = "default_diner",
             StartingCash = 5000m,
-            MinutesPerTick = 1,
+            GameMinutesPerRealSecond = 1,
             TicksPerRealSecond = 1,
             TableLayoutId = "default_diner_layout",
             StaffRosterSeed = Array.Empty<(RestaurantSim.Domain.Staff.StaffRole, int)>(),
             MenuItemIds = menuItemIds ?? new[] { 1, 4, 5 },
             ReputationStart = 20f,
-            QueueWaitMoodDecayRate = -0.4f,
-            CourseWaitMoodDecayRate = -0.3f,
-            NaturalMoodRecoveryRate = 0.5f,
+            QueueWaitMoodDecayPerSecond = -0.4f,
+            CourseWaitMoodDecayPerSecond = -0.3f,
+            NaturalMoodRecoveryPerSecond = 0.5f,
             ProbabilityCheckpointIntervalSeconds = 3f,
             PathReplanMaxWaitSeconds = 5f,
             MaxCallAttempts = 3,

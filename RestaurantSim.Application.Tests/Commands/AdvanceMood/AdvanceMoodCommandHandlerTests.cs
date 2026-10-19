@@ -1,4 +1,4 @@
-using FluentAssertions;
+﻿using FluentAssertions;
 using NSubstitute;
 using RestaurantSim.Application.Commands.AdvanceMood;
 using RestaurantSim.Domain;
@@ -58,7 +58,7 @@ public class AdvanceMoodCommandHandlerTests
 
         await _handler.Handle(new AdvanceMoodCommand(restaurant.RestaurantId), CancellationToken.None);
 
-        // decayRate = -0.3 * 1.0 = -0.3 (CourseWaitMoodDecayRate)
+        // decayRate = -0.3 * 1.0 = -0.3 (CourseWaitMoodDecayPerSecond)
         customer.Mood.Should().Be(60f - 0.3f);
     }
 
@@ -119,10 +119,10 @@ public class AdvanceMoodCommandHandlerTests
     {
         var config = new RestaurantConfig
         {
-            ConfigId = "default_diner", StartingCash = 5000m, MinutesPerTick = 1, TicksPerRealSecond = 1,
+            ConfigId = "default_diner", StartingCash = 5000m, GameMinutesPerRealSecond = 1, TicksPerRealSecond = 1,
             TableLayoutId = "default_diner_layout", StaffRosterSeed = Array.Empty<(RestaurantSim.Domain.Staff.StaffRole, int)>(),
             MenuItemIds = Array.Empty<int>(), ReputationStart = 20f,
-            QueueWaitMoodDecayRate = -0.4f, CourseWaitMoodDecayRate = -0.3f, NaturalMoodRecoveryRate = 0.5f,
+            QueueWaitMoodDecayPerSecond = -0.4f, CourseWaitMoodDecayPerSecond = -0.3f, NaturalMoodRecoveryPerSecond = 0.5f,
             ProbabilityCheckpointIntervalSeconds = 3f, PathReplanMaxWaitSeconds = 5f, MaxCallAttempts = 3,
             ActiveMealPeriods = new List<MealPeriodDefinition>(), EventModuleIds = Array.Empty<string>(),
             TipBaseRate = 50f, TipMoodExponent = 0.75f, MaxQueueLength = 12, BaseArrivalIntervalSeconds = 120f,

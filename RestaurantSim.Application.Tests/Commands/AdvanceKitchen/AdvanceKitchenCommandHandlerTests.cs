@@ -1,4 +1,4 @@
-using FluentAssertions;
+﻿using FluentAssertions;
 using MediatR;
 using NSubstitute;
 using RestaurantSim.Application.Commands.AdvanceKitchen;
@@ -221,10 +221,10 @@ public class AdvanceKitchenCommandHandlerTests
 
         var config = new RestaurantConfig
         {
-            ConfigId = "default_diner", StartingCash = 5000m, MinutesPerTick = 1, TicksPerRealSecond = 1,
+            ConfigId = "default_diner", StartingCash = 5000m, GameMinutesPerRealSecond = 1, TicksPerRealSecond = 1,
             TableLayoutId = "default_diner_layout", StaffRosterSeed = Array.Empty<(StaffRole, int)>(),
-            MenuItemIds = new[] { 5 }, ReputationStart = 20f, QueueWaitMoodDecayRate = -0.4f,
-            CourseWaitMoodDecayRate = -0.3f, NaturalMoodRecoveryRate = 0.5f, ProbabilityCheckpointIntervalSeconds = 3f,
+            MenuItemIds = new[] { 5 }, ReputationStart = 20f, QueueWaitMoodDecayPerSecond = -0.4f,
+            CourseWaitMoodDecayPerSecond = -0.3f, NaturalMoodRecoveryPerSecond = 0.5f, ProbabilityCheckpointIntervalSeconds = 3f,
             PathReplanMaxWaitSeconds = 5f, MaxCallAttempts = 3,
             ActiveMealPeriods = new List<MealPeriodDefinition>(), EventModuleIds = Array.Empty<string>(),
             TipBaseRate = 50f, TipMoodExponent = 0.75f, MaxQueueLength = 12, BaseArrivalIntervalSeconds = 120f
@@ -275,7 +275,7 @@ public class AdvanceKitchenCommandHandlerTests
         cookStats.Set(StatType.Fatigue, 0f);
         var cook = new StaffMember { StaffId = 1, Name = "Cook A", Role = StaffRole.Cook, State = StaffState.Idle, Stats = cookStats, AssignedMealPeriods = new[] { "lunch" } };
 
-        var heatLamp = new HeatLamp { HeatLampId = 1, Position = new GridPosition(4, 0), Hitbox = new GridBounds(1, 1), SlotCount = 1, QualityDecayRatePerTick = 1f };
+        var heatLamp = new HeatLamp { HeatLampId = 1, Position = new GridPosition(4, 0), Hitbox = new GridBounds(1, 1), SlotCount = 1, QualityDecayRatePerSecond = 1f };
 
         var restaurant = new Restaurant
         {

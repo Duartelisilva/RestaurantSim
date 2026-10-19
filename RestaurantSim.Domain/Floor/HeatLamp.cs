@@ -1,4 +1,4 @@
-namespace RestaurantSim.Domain.Floor;
+﻿namespace RestaurantSim.Domain.Floor;
 
 public sealed class HeatLamp : IPlaceable
 {
@@ -11,5 +11,5 @@ public sealed class HeatLamp : IPlaceable
 
     // OrderItemIds currently held; full when Count >= SlotCount.
     public List<int> OccupiedSlots { get; init; } = new();
-    public required float QualityDecayRatePerTick { get; init; }
+    public required float QualityDecayRatePerSecond { get; init; }
 }

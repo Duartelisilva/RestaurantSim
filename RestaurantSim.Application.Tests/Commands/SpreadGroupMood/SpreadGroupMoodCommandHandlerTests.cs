@@ -11,15 +11,55 @@ namespace RestaurantSim.Application.Tests.Commands.SpreadGroupMood;
 public class SpreadGroupMoodCommandHandlerTests
 {
     private readonly IRestaurantRepository _repository = Substitute.For<IRestaurantRepository>();
+    private readonly IPresetRepository<RestaurantConfig> _presetRepository = Substitute.For<IPresetRepository<RestaurantConfig>>();
     private readonly SpreadGroupMoodCommandHandler _handler;
 
     public SpreadGroupMoodCommandHandlerTests()
     {
-        _handler = new SpreadGroupMoodCommandHandler(_repository);
+        _presetRepository.GetAsync(Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns(BuildConfig(ticksPerRealSecond: 1));
+        _handler = new SpreadGroupMoodCommandHandler(_repository, _presetRepository);
     }
 
     [Fact]
-    public async Task Handle_MovesTwoAdultsTowardEachOther_AtNormalRate()
+    public async Task Handle_ScalesSpreadRateDownWithTheTickRateAsync()
+    {
+        _presetRepository.GetAsync(Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns(BuildConfig(ticksPerRealSecond: 2));
+        var restaurant = BuildRestaurant();
+        var (a, b) = AddSeatedPair(restaurant, moodA: 20, moodB: 80, susceptibilityA: 0.5f, susceptibilityB: 0.5f);
+
+        await _handler.Handle(new SpreadGroupMoodCommand(restaurant.RestaurantId), CancellationToken.None);
+
+        // at 1 tick/s the delta is 1.5 (first test); at 2 ticks/s it is half
+        a.Mood.Should().BeApproximately(20.75f, 0.001f);
+        b.Mood.Should().BeApproximately(79.25f, 0.001f);
+    }
+
+    private static RestaurantConfig BuildConfig(int ticksPerRealSecond) => new()
+    {
+        ConfigId = "default_diner",
+        StartingCash = 5000m,
+        GameMinutesPerRealSecond = 1,
+        TicksPerRealSecond = ticksPerRealSecond,
+        TableLayoutId = "default_diner_layout",
+        StaffRosterSeed = Array.Empty<(RestaurantSim.Domain.Staff.StaffRole, int)>(),
+        MenuItemIds = Array.Empty<int>(),
+        ReputationStart = 20f,
+        QueueWaitMoodDecayPerSecond = -0.4f,
+        CourseWaitMoodDecayPerSecond = -0.3f,
+        NaturalMoodRecoveryPerSecond = 0.5f,
+        ProbabilityCheckpointIntervalSeconds = 3f,
+        PathReplanMaxWaitSeconds = 5f,
+        MaxCallAttempts = 3,
+        ActiveMealPeriods = new List<RestaurantSim.Domain.Scheduling.MealPeriodDefinition>(),
+        EventModuleIds = Array.Empty<string>(),
+        TipBaseRate = 50f,
+        TipMoodExponent = 0.75f,
+        MaxQueueLength = 12,
+        BaseArrivalIntervalSeconds = 120f
+    };
+
+    [Fact]
+    public async Task Handle_MovesTwoAdultsTowardEachOther_AtNormalRateAsync()
     {
         // fullGroupAvgMood=(20+80)/2=50, not tipping -> rate=0.05
         // A: groupWeightedAvg=80 -> delta=0.5*(80-20)*0.05=1.5
@@ -34,7 +74,7 @@ public class SpreadGroupMoodCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_UsesTippingPointRate_WhenFullGroupAvgMoodBelowThreshold()
+    public async Task Handle_UsesTippingPointRate_WhenFullGroupAvgMoodBelowThresholdAsync()
     {
         // fullGroupAvgMood=(10+20)/2=15 < 30 -> rate=0.075
         // A: delta=0.5*(20-10)*0.075=0.375
@@ -47,7 +87,7 @@ public class SpreadGroupMoodCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_WeightsAdultInfluenceHigherThanChild()
+    public async Task Handle_WeightsAdultInfluenceHigherThanChildAsync()
     {
         // TargetKid's other two members: AdultInfluencer(100, weight 1.5),
         // ChildInfluencer(0, weight 1.0) -> weighted avg = 150/2.5 = 60
@@ -88,7 +128,7 @@ public class SpreadGroupMoodCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_HigherSusceptibility_ProducesLargerDelta()
+    public async Task Handle_HigherSusceptibility_ProducesLargerDeltaAsync()
     {
         var restaurantLow = BuildRestaurant();
         var (lowSusceptA, _) = AddSeatedPair(restaurantLow, moodA: 20, moodB: 80, susceptibilityA: 0.1f, susceptibilityB: 0.5f);
@@ -103,7 +143,7 @@ public class SpreadGroupMoodCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_SkipsSpread_WhenOnlyOnePresentMember()
+    public async Task Handle_SkipsSpread_WhenOnlyOnePresentMemberAsync()
     {
         var restaurant = BuildRestaurant();
         var (a, b) = AddSeatedPair(restaurant, moodA: 20, moodB: 80, susceptibilityA: 0.5f, susceptibilityB: 0.5f);
@@ -116,7 +156,7 @@ public class SpreadGroupMoodCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_AppliesSpread_ToQueuedGroupsToo()
+    public async Task Handle_AppliesSpread_ToQueuedGroupsTooAsync()
     {
         var restaurant = BuildRestaurant();
         var a = new Customer
@@ -140,7 +180,7 @@ public class SpreadGroupMoodCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_ClampsMoodWithinZeroToHundred()
+    public async Task Handle_ClampsMoodWithinZeroToHundredAsync()
     {
         var restaurant = BuildRestaurant();
         var (a, _) = AddSeatedPair(restaurant, moodA: 99.9f, moodB: 100f, susceptibilityA: 1.0f, susceptibilityB: 1.0f);
@@ -151,7 +191,7 @@ public class SpreadGroupMoodCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_ReturnsFailure_WhenRestaurantDoesNotExist()
+    public async Task Handle_ReturnsFailure_WhenRestaurantDoesNotExistAsync()
     {
         _repository.GetAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns((Restaurant?)null);
 

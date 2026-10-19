@@ -4,6 +4,7 @@ using RestaurantSim.Domain.Abstractions;
 using RestaurantSim.Domain.DomainEvents;
 using RestaurantSim.Domain.KitchenOps;
 using RestaurantSim.Domain.Staff;
+using RestaurantSim.Domain.Scheduling;
 
 namespace RestaurantSim.Application.Commands.DeliverOrderItem;
 
@@ -78,11 +79,15 @@ public sealed class DeliverOrderItemCommandHandler : IRequestHandler<DeliverOrde
         long heldTicks = 0;
         if (item.Status == OrderItemStatus.HeldUnderLamp && item.HeldSinceTick is long heldSince)
         {
+            var lampConfig = await _presetRepository.GetAsync(restaurant.ConfigId, cancellationToken);
+            if (lampConfig is null)
+                return Result.Failure($"RestaurantConfig '{restaurant.ConfigId}' does not exist.");
+
             heldTicks = restaurant.SimulationTick - heldSince;
             var lamp = restaurant.Floor.HeatLamps.FirstOrDefault(l => l.OccupiedSlots.Contains(item.OrderItemId));
             lamp?.OccupiedSlots.Remove(item.OrderItemId);
 
-            var decayRate = lamp?.QualityDecayRatePerTick ?? 0f;
+            var decayRate = TickRates.PerTick(lamp?.QualityDecayRatePerSecond ?? 0f, lampConfig.TicksPerRealSecond);
             var effectiveDecayRate = decayRate * (item.IsHighQuality ? 0.5f : 1.0f);
             var baseQuality = item.IsHighQuality ? 100f : (item.HadFoodQualityEvent ? 30f : 80f);
             var qualityAtServe = Math.Clamp(baseQuality - heldTicks * effectiveDecayRate, 0f, 100f);

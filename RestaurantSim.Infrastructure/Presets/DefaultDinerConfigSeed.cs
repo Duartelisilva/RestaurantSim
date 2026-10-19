@@ -1,4 +1,4 @@
-using RestaurantSim.Domain;
+﻿using RestaurantSim.Domain;
 using RestaurantSim.Domain.Scheduling;
 using RestaurantSim.Domain.Staff;
 
@@ -15,7 +15,7 @@ public static class DefaultDinerConfigSeed
     {
         ConfigId = "default_diner",
         StartingCash = 5000m,
-        MinutesPerTick = 1,
+        GameMinutesPerRealSecond = 1,
         TicksPerRealSecond = 1,
         TableLayoutId = "default_diner_layout",
         StaffRosterSeed = new (StaffRole Role, int Count)[]
@@ -31,9 +31,9 @@ public static class DefaultDinerConfigSeed
         PatienceDecayBaseline = null, // open, pending playtesting (presets doc)
         ReinformMoodPenalty = null, // open, pending playtesting
         PreOpeningLeadMinutes = 30,
-        QueueWaitMoodDecayRate = -0.4f,
-        CourseWaitMoodDecayRate = -0.3f,
-        NaturalMoodRecoveryRate = 0.5f,
+        QueueWaitMoodDecayPerSecond = -0.4f,
+        CourseWaitMoodDecayPerSecond = -0.3f,
+        NaturalMoodRecoveryPerSecond = 0.5f,
         ProbabilityCheckpointIntervalSeconds = 3f,
         PathReplanMaxWaitSeconds = 5f,
         MaxCallAttempts = 3,

@@ -1,8 +1,9 @@
-using MediatR;
+﻿using MediatR;
 using RestaurantSim.Application.Common;
 using RestaurantSim.Domain;
 using RestaurantSim.Domain.Abstractions;
 using RestaurantSim.Domain.CustomerService;
+using RestaurantSim.Domain.Scheduling;
 
 namespace RestaurantSim.Application.Commands.AdvanceMood;
 
@@ -37,7 +38,7 @@ public sealed class AdvanceMoodCommandHandler : IRequestHandler<AdvanceMoodComma
         {
             foreach (var member in group.Members)
             {
-                var decayRate = config.QueueWaitMoodDecayRate * DecayModifier(member.PatienceLevel, patienceDecayBaseline);
+                var decayRate = TickRates.PerTick(config.QueueWaitMoodDecayPerSecond, config.TicksPerRealSecond) * DecayModifier(member.PatienceLevel, patienceDecayBaseline);
                 member.Mood = Math.Clamp(member.Mood + decayRate, 0, 100);
             }
         }
@@ -61,12 +62,12 @@ public sealed class AdvanceMoodCommandHandler : IRequestHandler<AdvanceMoodComma
 
                 if (isWaitingOnCourse)
                 {
-                    var decayRate = config.CourseWaitMoodDecayRate * DecayModifier(member.PatienceLevel, patienceDecayBaseline);
+                    var decayRate = TickRates.PerTick(config.CourseWaitMoodDecayPerSecond, config.TicksPerRealSecond) * DecayModifier(member.PatienceLevel, patienceDecayBaseline);
                     member.Mood = Math.Clamp(member.Mood + decayRate, 0, 100);
                 }
                 else
                 {
-                    var recoveryRate = config.NaturalMoodRecoveryRate * RecoveryModifier(member.PatienceLevel);
+                    var recoveryRate = TickRates.PerTick(config.NaturalMoodRecoveryPerSecond, config.TicksPerRealSecond) * RecoveryModifier(member.PatienceLevel);
                     member.Mood = Math.Clamp(member.Mood + recoveryRate, 0, 100);
                 }
             }
