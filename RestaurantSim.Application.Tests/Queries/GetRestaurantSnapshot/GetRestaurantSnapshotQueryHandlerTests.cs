@@ -22,7 +22,7 @@ public class GetRestaurantSnapshotQueryHandlerTests
     }
 
     [Fact]
-    public async Task Handle_ReturnsFailure_WhenRestaurantDoesNotExist()
+    public async Task Handle_ReturnsFailure_WhenRestaurantDoesNotExistAsync()
     {
         _repository.GetAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns((Restaurant?)null);
 
@@ -32,7 +32,7 @@ public class GetRestaurantSnapshotQueryHandlerTests
     }
 
     [Fact]
-    public async Task Handle_ReturnsFailure_WhenConfigDoesNotExist()
+    public async Task Handle_ReturnsFailure_WhenConfigDoesNotExistAsync()
     {
         var restaurant = BuildRestaurant();
         _repository.GetAsync(restaurant.RestaurantId, Arg.Any<CancellationToken>()).Returns(restaurant);
@@ -44,7 +44,7 @@ public class GetRestaurantSnapshotQueryHandlerTests
     }
 
     [Fact]
-    public async Task Handle_MapsClockSettingsAndFloor()
+    public async Task Handle_MapsClockSettingsAndFloorAsync()
     {
         var restaurant = BuildRestaurant();
         restaurant.SimulationTick = 42;
@@ -72,7 +72,7 @@ public class GetRestaurantSnapshotQueryHandlerTests
     }
 
     [Fact]
-    public async Task Handle_MapsQueuedGroups()
+    public async Task Handle_MapsQueuedGroupsAsync()
     {
         var restaurant = BuildRestaurant();
         restaurant.CustomerService.Queue.Add(new CustomerGroup
