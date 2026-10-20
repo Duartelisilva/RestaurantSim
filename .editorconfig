@@ -70,6 +70,20 @@ dotnet_naming_symbols.private_field_symbol.applicable_accessibilities = private
 dotnet_naming_style.underscore_camel_case_style.required_prefix = _
 dotnet_naming_style.underscore_camel_case_style.capitalization = camel_case
 
+# Constants and static readonly fields — PascalCase. More specific than the
+# private-field rule above (they require a modifier), so they take precedence.
+dotnet_naming_rule.constants_pascal_case.severity = warning
+dotnet_naming_rule.constants_pascal_case.symbols = constant_symbol
+dotnet_naming_rule.constants_pascal_case.style = pascal_case_style
+dotnet_naming_symbols.constant_symbol.applicable_kinds = field
+dotnet_naming_symbols.constant_symbol.required_modifiers = const
+
+dotnet_naming_rule.static_readonly_pascal_case.severity = warning
+dotnet_naming_rule.static_readonly_pascal_case.symbols = static_readonly_symbol
+dotnet_naming_rule.static_readonly_pascal_case.style = pascal_case_style
+dotnet_naming_symbols.static_readonly_symbol.applicable_kinds = field
+dotnet_naming_symbols.static_readonly_symbol.required_modifiers = static, readonly
+
 # Braces — Allman style (standard .NET/Visual Studio default)
 csharp_new_line_before_open_brace = all
 
