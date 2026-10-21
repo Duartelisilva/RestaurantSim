@@ -36,13 +36,10 @@ public static class PlaceOrderItemValidation
             var menuItem = await menuRepository.GetByIdAsync(itemRequest.MenuItemId, cancellationToken);
             if (menuItem is null) return false;
 
-            if (menuItem.Course != phase) return false;
-
-            // Kids-menu enforcement (entity doc §13).
-            if (!customer.IsAdult && menuItem.Category != MenuItemCategory.Kids) return false;
-
-            // Meal-period restriction (business logic §1.4, entity doc §18/§24a).
-            if (!menuItem.AvailableMealPeriods.Contains(activePeriod.MealPeriodId)) return false;
+            // Course match, kids-menu enforcement (entity doc §13) and meal-period
+            // restriction (business logic §1.4, entity doc §18/§24a) live in ONE shared
+            // predicate, also used by OrderGenerator to choose what to order.
+            if (!MenuItemEligibility.IsOrderable(menuItem, phase, customer.IsAdult, activePeriod.MealPeriodId)) return false;
         }
 
         return true;

@@ -30,4 +30,16 @@ public class TickRatesTests
     {
         TickRates.PerTick(0.5f, 0).Should().Be(0.5f);
     }
+
+    [Theory]
+    [InlineData(10f, 1, 10)]
+    [InlineData(10f, 2, 20)]   // a 10 s duration stays 10 real seconds at 2 ticks per second
+    [InlineData(10f, 4, 40)]
+    [InlineData(2.5f, 1, 3)]   // round half up
+    [InlineData(0.2f, 1, 1)]   // never 0 ticks
+    [InlineData(0f, 1, 1)]
+    public void SecondsToTicks_ConvertsRealSecondsToTicks(float seconds, int ticksPerRealSecond, long expected)
+    {
+        TickRates.SecondsToTicks(seconds, ticksPerRealSecond).Should().Be(expected);
+    }
 }

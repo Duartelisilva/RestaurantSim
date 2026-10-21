@@ -1,3 +1,4 @@
+using RestaurantSim.Domain.CustomerService;
 using RestaurantSim.Domain.Events;
 using RestaurantSim.Domain.Scheduling;
 using RestaurantSim.Domain.Staff;
@@ -95,4 +96,8 @@ public sealed class RestaurantConfig
     // In-game minutes before Opening that a brand-new restaurant starts at (at most;
     // clamped to the start of day). Nullable, code default 30 if unset.
     public int? PreOpeningLeadMinutes { get; init; }
+
+    // Service flow timings, chances and eating durations (mechanics doc §17, draft).
+    // Defaults are the approved first-pass values; durations are authored in real seconds.
+    public ServiceFlowConfig ServiceFlow { get; init; } = new();
 }
