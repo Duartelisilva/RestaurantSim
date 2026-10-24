@@ -13,16 +13,56 @@ namespace RestaurantSim.Application.Tests.Commands.SeatGroup;
 public class SeatGroupCommandHandlerTests
 {
     private readonly IRestaurantRepository _repository = Substitute.For<IRestaurantRepository>();
+    private readonly IPresetRepository<RestaurantConfig> _presetRepository = Substitute.For<IPresetRepository<RestaurantConfig>>();
     private readonly IPublisher _publisher = Substitute.For<IPublisher>();
     private readonly SeatGroupCommandHandler _handler;
 
     public SeatGroupCommandHandlerTests()
     {
-        _handler = new SeatGroupCommandHandler(_repository, _publisher);
+        _presetRepository.GetAsync(Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns(BuildConfig());
+        _handler = new SeatGroupCommandHandler(_repository, _presetRepository, _publisher);
     }
 
     [Fact]
-    public async Task Handle_SeatsGroup_WhenClusterIsFreeAndFits()
+    public async Task Handle_SchedulesTheFirstWaiterVisitAsync()
+    {
+        var restaurant = BuildRestaurant(out var group, out var cluster);
+        restaurant.SimulationTick = 100;
+        _repository.GetAsync(restaurant.RestaurantId, Arg.Any<CancellationToken>()).Returns(restaurant);
+
+        await _handler.Handle(new SeatGroupCommand(restaurant.RestaurantId, group.GroupId, cluster.ClusterId), CancellationToken.None);
+
+        group.PhaseWaitState.Should().Be(GroupPhaseWaitState.AutoVisitPending);
+        group.NextVisit.Should().Be(DiningVisit.Drinks);
+        group.NextAutoVisitTick.Should().Be(103); // 3 s at 1 tick per second
+    }
+
+    private static RestaurantConfig BuildConfig() => new()
+    {
+        ConfigId = "default_diner",
+        StartingCash = 5000m,
+        GameMinutesPerRealSecond = 1,
+        TicksPerRealSecond = 1,
+        TableLayoutId = "default_diner_layout",
+        StaffRosterSeed = Array.Empty<(RestaurantSim.Domain.Staff.StaffRole, int)>(),
+        MenuItemIds = Array.Empty<int>(),
+        ReputationStart = 20f,
+        QueueWaitMoodDecayPerSecond = -0.4f,
+        CourseWaitMoodDecayPerSecond = -0.3f,
+        NaturalMoodRecoveryPerSecond = 0.5f,
+        ProbabilityCheckpointIntervalSeconds = 3f,
+        PathReplanMaxWaitSeconds = 5f,
+        MaxCallAttempts = 3,
+        ActiveMealPeriods = new List<RestaurantSim.Domain.Scheduling.MealPeriodDefinition>(),
+        EventModuleIds = Array.Empty<string>(),
+        TipBaseRate = 50f,
+        TipMoodExponent = 0.75f,
+        MaxQueueLength = 12,
+        BaseArrivalIntervalSeconds = 15f
+    };
+
+    [Fact]
+    public async Task Handle_SeatsGroup_WhenClusterIsFreeAndFitsAsync()
     {
         var restaurant = BuildRestaurant(out var group, out var cluster);
         _repository.GetAsync(restaurant.RestaurantId, Arg.Any<CancellationToken>()).Returns(restaurant);
@@ -46,7 +86,7 @@ public class SeatGroupCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_ReturnsFailure_WhenRestaurantDoesNotExist()
+    public async Task Handle_ReturnsFailure_WhenRestaurantDoesNotExistAsync()
     {
         _repository.GetAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns((Restaurant?)null);
 
@@ -58,7 +98,7 @@ public class SeatGroupCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_ReturnsFailure_WhenGroupIsNotQueued()
+    public async Task Handle_ReturnsFailure_WhenGroupIsNotQueuedAsync()
     {
         var restaurant = BuildRestaurant(out _, out var cluster);
         _repository.GetAsync(restaurant.RestaurantId, Arg.Any<CancellationToken>()).Returns(restaurant);
@@ -71,7 +111,7 @@ public class SeatGroupCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_ReturnsFailure_WhenClusterDoesNotFitGroup()
+    public async Task Handle_ReturnsFailure_WhenClusterDoesNotFitGroupAsync()
     {
         var restaurant = BuildRestaurant(out var group, out var cluster, partySize: 6, clusterCapacity: 2);
         _repository.GetAsync(restaurant.RestaurantId, Arg.Any<CancellationToken>()).Returns(restaurant);
@@ -84,7 +124,7 @@ public class SeatGroupCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_ReturnsFailure_WhenClusterIsNotFree()
+    public async Task Handle_ReturnsFailure_WhenClusterIsNotFreeAsync()
     {
         var restaurant = BuildRestaurant(out var group, out var cluster);
         cluster.OccupiedBy = 999;

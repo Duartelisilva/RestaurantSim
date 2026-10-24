@@ -21,6 +21,28 @@ public static class MealPeriodCalculator
         return null;
     }
 
+    // The period a group is served under: the active one, otherwise the one that ended
+    // most recently. A group seated before closing is served out normally (business
+    // logic §1.1, mechanics doc §15), so after the period ends it still orders under the
+    // period it sat down in rather than being unable to order at all. Past midnight (no
+    // period has "ended" yet today) it falls back to the day's last-ending period.
+    public static MealPeriodDefinition? FindServicePeriod(
+        IReadOnlyList<MealPeriodDefinition> activePeriods, double minutesPerTick, long currentTick)
+    {
+        var active = FindActive(activePeriods, minutesPerTick, currentTick);
+        if (active is not null || activePeriods.Count == 0)
+            return active;
+
+        var minutesIntoDay = MinutesIntoDay(minutesPerTick, currentTick);
+
+        var mostRecentlyEnded = activePeriods
+            .Where(p => PeriodWindow(p).EndMinutes <= minutesIntoDay)
+            .OrderByDescending(p => PeriodWindow(p).EndMinutes)
+            .FirstOrDefault();
+
+        return mostRecentlyEnded ?? activePeriods.OrderByDescending(p => PeriodWindow(p).EndMinutes).First();
+    }
+
     public static double MinutesIntoDay(double minutesPerTick, long currentTick)
     {
         var ticksPerDay = (long)Math.Round(1440.0 / minutesPerTick);

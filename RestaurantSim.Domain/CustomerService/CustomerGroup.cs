@@ -18,6 +18,16 @@ public enum CoursePhase
     Done
 }
 
+// What the group's NEXT scheduled waiter visit is for (mechanics doc §17, draft).
+public enum DiningVisit
+{
+    Drinks,
+    Main,
+    Refill,
+    Dessert,
+    Bill
+}
+
 public enum GroupPhaseWaitState
 {
     AutoVisitPending,
@@ -45,6 +55,12 @@ public sealed class CustomerGroup
     public CoursePhase CoursePhase { get; set; } = CoursePhase.Seated;
     public GroupPhaseWaitState PhaseWaitState { get; set; } = GroupPhaseWaitState.AutoVisitPending;
     public long NextAutoVisitTick { get; set; }
+
+    // Service flow (mechanics doc §17, draft): the kind of the next waiter visit, and
+    // how many times the group has already said "not ready" at the current one
+    // (each recheck raises the chance they are ready — ServiceFlowTimings).
+    public DiningVisit NextVisit { get; set; } = DiningVisit.Drinks;
+    public int VisitAttempt { get; set; }
 
     public int? CurrentOrderId { get; set; }
 

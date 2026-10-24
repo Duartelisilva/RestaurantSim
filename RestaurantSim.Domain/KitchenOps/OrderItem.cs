@@ -25,6 +25,10 @@ public sealed class OrderItem
     public bool IsHighQuality { get; set; }
     public bool HadFoodQualityEvent { get; set; }
 
+    // Service flow (mechanics doc §17, draft): when the person finishes eating/drinking
+    // this item — rolled when it is Served. Null until then.
+    public long? ConsumedByTick { get; set; }
+
     // New — needed to gate pickup-item (Drinks) fetch time. Order.CreatedAtTick
     // reflects only the FIRST item ever added to the order, which is wrong for
     // a later mid-meal drink refill added to an already-existing order.

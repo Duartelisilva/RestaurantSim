@@ -81,6 +81,39 @@ public class MealPeriodCalculatorTests
         MealPeriodCalculator.FindActive(periods, 0.25, 2880)!.MealPeriodId.Should().Be("lunch"); // 12:00
     }
 
+    [Fact]
+    public void FindServicePeriod_DuringAPeriod_IsThatPeriod()
+    {
+        var periods = new[] { Period("lunch", 12, 0, 15, 0), Period("dinner", 19, 0, 0, 0) };
+
+        MealPeriodCalculator.FindServicePeriod(periods, 1, 750)!.MealPeriodId.Should().Be("lunch");
+    }
+
+    [Fact]
+    public void FindServicePeriod_AfterAPeriodEnds_StillReturnsTheOneThatJustEnded()
+    {
+        var periods = new[] { Period("lunch", 12, 0, 15, 0), Period("dinner", 19, 0, 0, 0) };
+
+        // 15:30 and 17:00: nothing is open, but lunch is the most recent period.
+        MealPeriodCalculator.FindServicePeriod(periods, 1, 930)!.MealPeriodId.Should().Be("lunch");
+        MealPeriodCalculator.FindServicePeriod(periods, 1, 1020)!.MealPeriodId.Should().Be("lunch");
+    }
+
+    [Fact]
+    public void FindServicePeriod_AfterMidnight_FallsBackToTheDaysLastPeriod()
+    {
+        var periods = new[] { Period("lunch", 12, 0, 15, 0), Period("dinner", 19, 0, 0, 0) };
+
+        // 00:20 the next day: dinner (ending at midnight) is still the period being served out.
+        MealPeriodCalculator.FindServicePeriod(periods, 1, 20)!.MealPeriodId.Should().Be("dinner");
+    }
+
+    [Fact]
+    public void FindServicePeriod_NoPeriods_IsNull()
+    {
+        MealPeriodCalculator.FindServicePeriod(Array.Empty<MealPeriodDefinition>(), 1, 750).Should().BeNull();
+    }
+
     private static MealPeriodDefinition Period(string id, int startHour, int startMinute, int endHour, int endMinute) => new()
     {
         MealPeriodId = id,

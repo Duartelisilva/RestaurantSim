@@ -22,7 +22,8 @@ public static class PlaceOrderItemValidation
         IMenuRepository menuRepository,
         CancellationToken cancellationToken)
     {
-        var activePeriod = MealPeriodCalculator.FindActive(config.ActiveMealPeriods, config.MinutesPerTick, restaurant.SimulationTick);
+        // Served-out groups can still order after their period closes (FindServicePeriod).
+        var activePeriod = MealPeriodCalculator.FindServicePeriod(config.ActiveMealPeriods, config.MinutesPerTick, restaurant.SimulationTick);
         if (activePeriod is null) return false;
 
         foreach (var itemRequest in items)

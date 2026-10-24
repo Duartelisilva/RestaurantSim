@@ -2,6 +2,7 @@ using MediatR;
 using Microsoft.Extensions.Logging;
 using RestaurantSim.Application.AutoManager;
 using RestaurantSim.Application.Commands.AdvanceCleaningProgress;
+using RestaurantSim.Application.Commands.AdvanceDining;
 using RestaurantSim.Application.Commands.AdvanceKitchen;
 using RestaurantSim.Application.Commands.AdvanceMood;
 using RestaurantSim.Application.Commands.AdvanceStaffShift;
@@ -61,6 +62,7 @@ public sealed class RestaurantTickProcessor
         await _repository.SaveAsync(restaurant, cancellationToken);
 
         await TryDispatchAsync(new AdvanceKitchenCommand(restaurant.RestaurantId), restaurant.RestaurantId, cancellationToken);
+        await TryDispatchAsync(new AdvanceDiningCommand(restaurant.RestaurantId), restaurant.RestaurantId, cancellationToken);
         await TryDispatchAsync(new SpawnArrivalCommand(restaurant.RestaurantId), restaurant.RestaurantId, cancellationToken);
         await TryDispatchAsync(new AdvanceCleaningProgressCommand(restaurant.RestaurantId), restaurant.RestaurantId, cancellationToken);
         await TryDispatchAsync(new AdvanceMoodCommand(restaurant.RestaurantId), restaurant.RestaurantId, cancellationToken);
