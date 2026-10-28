@@ -4,6 +4,7 @@ using RestaurantSim.Domain;
 using RestaurantSim.Domain.Abstractions;
 using RestaurantSim.Domain.CustomerService;
 using RestaurantSim.Domain.DomainEvents;
+using RestaurantSim.Domain.Floor;
 using RestaurantSim.Domain.Scheduling;
 
 namespace RestaurantSim.Application.Commands.SpawnArrival;
@@ -66,6 +67,25 @@ public sealed class SpawnArrivalCommandHandler : IRequestHandler<SpawnArrivalCom
             groupId,
             restaurant.SimulationTick,
             nextCustomerId: () => restaurant.CustomerService.NextCustomerId++);
+
+        // A party larger than anything the layout could EVER seat (even by merging tables) is
+        // turned away at the door instead of clogging the queue. The reputation penalty is a
+        // config fraction of current reputation, 0 by default. A layout with no tables at all
+        // is degenerate and has no limit to apply.
+        var maxPartySize = TableMergeRules.MaxPartySize(restaurant.Floor.Tables);
+        if (maxPartySize > 0 && group.PartySize > maxPartySize)
+        {
+            restaurant.Reputation = MathF.Max(0, restaurant.Reputation - restaurant.Reputation * config.OversizedPartyReputationPenalty);
+            restaurant.CustomerService.NextArrivalTick =
+                restaurant.SimulationTick + ComputeIntervalTicks(config, restaurant, activePeriod);
+
+            await _repository.SaveAsync(restaurant, cancellationToken);
+            await _publisher.Publish(
+                new GroupTurnedAway(restaurant.RestaurantId, restaurant.Reputation, restaurant.SimulationTick, TurnedAwayReason.PartyTooLarge),
+                cancellationToken);
+
+            return Result.Success();
+        }
 
         restaurant.CustomerService.Queue.Add(group);
 

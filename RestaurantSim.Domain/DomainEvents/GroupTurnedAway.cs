@@ -2,5 +2,15 @@ using MediatR;
 
 namespace RestaurantSim.Domain.DomainEvents;
 
-// Business logic §1.2: queue at max length, group turned away, reputation hit.
-public sealed record GroupTurnedAway(Guid RestaurantId, float ReputationAfter, long Tick) : INotification;
+public enum TurnedAwayReason
+{
+    QueueFull,
+    PartyTooLarge
+}
+
+// Reason defaults to QueueFull so existing publishers/constructors keep compiling.
+public sealed record GroupTurnedAway(
+    Guid RestaurantId,
+    float ReputationAfter,
+    long Tick,
+    TurnedAwayReason Reason = TurnedAwayReason.QueueFull) : INotification;

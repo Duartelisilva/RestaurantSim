@@ -97,6 +97,10 @@ public sealed class RestaurantConfig
     // clamped to the start of day). Nullable, code default 30 if unset.
     public int? PreOpeningLeadMinutes { get; init; }
 
+    // Reputation lost (as a fraction of current reputation) when a party larger than the
+    // layout could ever seat is turned away at the door. 0 = no penalty (the default).
+    public float OversizedPartyReputationPenalty { get; init; } = 0f;
+
     // Service flow timings, chances and eating durations (mechanics doc §17, draft).
     // Defaults are the approved first-pass values; durations are authored in real seconds.
     public ServiceFlowConfig ServiceFlow { get; init; } = new();
