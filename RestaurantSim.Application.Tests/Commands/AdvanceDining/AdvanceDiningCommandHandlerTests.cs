@@ -71,7 +71,7 @@ public class AdvanceDiningCommandHandlerTests
     // ---------- first visit / ordering ----------
 
     [Fact]
-    public async Task VisitNotDueYet_DoesNothing()
+    public async Task VisitNotDueYet_DoesNothingAsync()
     {
         var (restaurant, group) = Scenario(DiningVisit.Drinks, GroupPhaseWaitState.AutoVisitPending, nextTick: Now + 1);
 
@@ -82,7 +82,7 @@ public class AdvanceDiningCommandHandlerTests
     }
 
     [Fact]
-    public async Task DrinksVisitDueAndReady_OrdersOneDrinkPerMember_AndMovesToServing()
+    public async Task DrinksVisitDueAndReady_OrdersOneDrinkPerMember_AndMovesToServingAsync()
     {
         var (restaurant, group) = Scenario(DiningVisit.Drinks, GroupPhaseWaitState.AutoVisitPending, nextTick: Now);
 
@@ -97,7 +97,7 @@ public class AdvanceDiningCommandHandlerTests
     }
 
     [Fact]
-    public async Task VisitDueButGroupNotReady_SchedulesARecheck()
+    public async Task VisitDueButGroupNotReady_SchedulesARecheckAsync()
     {
         _random.NextDouble().Returns(0.99); // above the 0.9 first-attempt chance
         var (restaurant, group) = Scenario(DiningVisit.Drinks, GroupPhaseWaitState.AutoVisitPending, nextTick: Now);
@@ -111,7 +111,7 @@ public class AdvanceDiningCommandHandlerTests
     }
 
     [Fact]
-    public async Task OnARecheck_TheSameRollThatFailedBeforeNowSucceeds()
+    public async Task OnARecheck_TheSameRollThatFailedBeforeNowSucceedsAsync()
     {
         _random.NextDouble().Returns(0.93); // fails at 0.90, passes at 0.95 (second attempt)
         var (restaurant, group) = Scenario(DiningVisit.Drinks, GroupPhaseWaitState.RecheckScheduled, nextTick: Now, attempt: 1);
@@ -124,7 +124,7 @@ public class AdvanceDiningCommandHandlerTests
     }
 
     [Fact]
-    public async Task NoIdleWaiter_TheVisitStaysDue()
+    public async Task NoIdleWaiter_TheVisitStaysDueAsync()
     {
         var (restaurant, group) = Scenario(DiningVisit.Drinks, GroupPhaseWaitState.AutoVisitPending, nextTick: Now, waiterState: StaffState.Busy);
 
@@ -135,7 +135,7 @@ public class AdvanceDiningCommandHandlerTests
     }
 
     [Fact]
-    public async Task MainVisitDue_OrdersOneMainPerMember_ThenExpectsTheRefillVisit()
+    public async Task MainVisitDue_OrdersOneMainPerMember_ThenExpectsTheRefillVisitAsync()
     {
         var (restaurant, group) = Scenario(DiningVisit.Main, GroupPhaseWaitState.AutoVisitPending, nextTick: Now, course: CoursePhase.Drinks);
 
@@ -148,7 +148,7 @@ public class AdvanceDiningCommandHandlerTests
     }
 
     [Fact]
-    public async Task PlaceOrderFails_TheFailureIsReported_AndTheVisitStaysDue()
+    public async Task PlaceOrderFails_TheFailureIsReported_AndTheVisitStaysDueAsync()
     {
         _placeOrder.Handle(Arg.Any<PlaceOrderCommand>(), Arg.Any<CancellationToken>()).Returns(Result.Failure("boom"));
         var (restaurant, group) = Scenario(DiningVisit.Drinks, GroupPhaseWaitState.AutoVisitPending, nextTick: Now);
@@ -163,7 +163,7 @@ public class AdvanceDiningCommandHandlerTests
     // ---------- scheduling the next visit ----------
 
     [Fact]
-    public async Task AllDrinksServed_SchedulesTheMainVisitFiveSecondsAhead()
+    public async Task AllDrinksServed_SchedulesTheMainVisitFiveSecondsAheadAsync()
     {
         var items = new[] { Item(1, 1, 1, ItemPhase.Drinks, OrderItemStatus.Served), Item(2, 2, 1, ItemPhase.Drinks, OrderItemStatus.Served) };
         var (restaurant, group) = Scenario(DiningVisit.Main, GroupPhaseWaitState.Serving, nextTick: 0, course: CoursePhase.Drinks, items: items);
@@ -175,7 +175,7 @@ public class AdvanceDiningCommandHandlerTests
     }
 
     [Fact]
-    public async Task DrinksNotAllServed_NothingIsScheduledYet()
+    public async Task DrinksNotAllServed_NothingIsScheduledYetAsync()
     {
         var items = new[] { Item(1, 1, 1, ItemPhase.Drinks, OrderItemStatus.Served), Item(2, 2, 1, ItemPhase.Drinks, OrderItemStatus.Queued) };
         var (restaurant, group) = Scenario(DiningVisit.Main, GroupPhaseWaitState.Serving, nextTick: 0, course: CoursePhase.Drinks, items: items);
@@ -186,7 +186,7 @@ public class AdvanceDiningCommandHandlerTests
     }
 
     [Fact]
-    public async Task ScheduledDelays_AreInRealSeconds_SoTheyDoubleInTicksAtTwoTicksPerSecond()
+    public async Task ScheduledDelays_AreInRealSeconds_SoTheyDoubleInTicksAtTwoTicksPerSecondAsync()
     {
         var items = new[] { Item(1, 1, 1, ItemPhase.Drinks, OrderItemStatus.Served), Item(2, 2, 1, ItemPhase.Drinks, OrderItemStatus.Served) };
         var (restaurant, group) = Scenario(DiningVisit.Main, GroupPhaseWaitState.Serving, nextTick: 0, course: CoursePhase.Drinks, items: items, ticksPerRealSecond: 2);
@@ -197,7 +197,7 @@ public class AdvanceDiningCommandHandlerTests
     }
 
     [Fact]
-    public async Task AllMainsServed_SchedulesTheRefillVisit()
+    public async Task AllMainsServed_SchedulesTheRefillVisitAsync()
     {
         var items = new[] { Item(1, 1, 5, ItemPhase.EntryMain, OrderItemStatus.Served), Item(2, 2, 5, ItemPhase.EntryMain, OrderItemStatus.Served) };
         var (restaurant, group) = Scenario(DiningVisit.Refill, GroupPhaseWaitState.Serving, nextTick: 0, course: CoursePhase.EntryMain, items: items);
@@ -209,7 +209,7 @@ public class AdvanceDiningCommandHandlerTests
     }
 
     [Fact]
-    public async Task MainsOnlySchedulesTheDessertVisitOnceEveryoneHasFinishedEating()
+    public async Task MainsOnlySchedulesTheDessertVisitOnceEveryoneHasFinishedEatingAsync()
     {
         var eating = new[] { Item(1, 1, 5, ItemPhase.EntryMain, OrderItemStatus.Served, consumedBy: Now + 5), Item(2, 2, 5, ItemPhase.EntryMain, OrderItemStatus.Served, consumedBy: Now - 1) };
         var (restaurant, group) = Scenario(DiningVisit.Dessert, GroupPhaseWaitState.Serving, nextTick: 0, course: CoursePhase.EntryMain, items: eating);
@@ -225,7 +225,7 @@ public class AdvanceDiningCommandHandlerTests
     }
 
     [Fact]
-    public async Task AllDessertsEaten_SchedulesTheBill()
+    public async Task AllDessertsEaten_SchedulesTheBillAsync()
     {
         var items = new[] { Item(1, 1, 8, ItemPhase.Dessert, OrderItemStatus.Served, consumedBy: Now - 1) };
         var (restaurant, group) = Scenario(DiningVisit.Bill, GroupPhaseWaitState.Serving, nextTick: 0, course: CoursePhase.Dessert, items: items);
@@ -239,7 +239,7 @@ public class AdvanceDiningCommandHandlerTests
     // ---------- refill visit ----------
 
     [Fact]
-    public async Task RefillVisit_OnlyMembersWhoFinishedTheirDrinkCanOrderAnother()
+    public async Task RefillVisit_OnlyMembersWhoFinishedTheirDrinkCanOrderAnotherAsync()
     {
         var items = new[]
         {
@@ -258,7 +258,7 @@ public class AdvanceDiningCommandHandlerTests
     }
 
     [Fact]
-    public async Task RefillVisit_NobodyAsksForAnother_StillMovesOn()
+    public async Task RefillVisit_NobodyAsksForAnother_StillMovesOnAsync()
     {
         _random.NextDouble().Returns(0.9); // above every refill chance
         var items = new[] { Item(1, 1, 1, ItemPhase.Drinks, OrderItemStatus.Served, consumedBy: Now - 1) };
@@ -273,7 +273,7 @@ public class AdvanceDiningCommandHandlerTests
     // ---------- dessert visit ----------
 
     [Fact]
-    public async Task DessertVisit_WhenNobodyOrders_GoesStraightToTheBill()
+    public async Task DessertVisit_WhenNobodyOrders_GoesStraightToTheBillAsync()
     {
         _random.NextDouble().Returns(0.0, 0.9, 0.9); // ready; then both members decline
         var (restaurant, group) = Scenario(DiningVisit.Dessert, GroupPhaseWaitState.AutoVisitPending, nextTick: Now, course: CoursePhase.EntryMain);
@@ -287,7 +287,7 @@ public class AdvanceDiningCommandHandlerTests
     }
 
     [Fact]
-    public async Task DessertVisit_WhenSomeoneOrders_PlacesTheDessertOrder()
+    public async Task DessertVisit_WhenSomeoneOrders_PlacesTheDessertOrderAsync()
     {
         var (restaurant, group) = Scenario(DiningVisit.Dessert, GroupPhaseWaitState.AutoVisitPending, nextTick: Now, course: CoursePhase.EntryMain);
 
@@ -303,7 +303,7 @@ public class AdvanceDiningCommandHandlerTests
     // ---------- bill, leaving ----------
 
     [Fact]
-    public async Task BillVisitDue_PaysAndSchedulesTheLeave()
+    public async Task BillVisitDue_PaysAndSchedulesTheLeaveAsync()
     {
         var (restaurant, group) = Scenario(DiningVisit.Bill, GroupPhaseWaitState.AutoVisitPending, nextTick: Now, course: CoursePhase.Dessert);
 
@@ -314,7 +314,7 @@ public class AdvanceDiningCommandHandlerTests
     }
 
     [Fact]
-    public async Task PayBillFails_IsReported_AndRetriedNextTick()
+    public async Task PayBillFails_IsReported_AndRetriedNextTickAsync()
     {
         _payBill.Handle(Arg.Any<PayBillCommand>(), Arg.Any<CancellationToken>()).Returns(Result.Failure("not eligible"));
         var (restaurant, group) = Scenario(DiningVisit.Bill, GroupPhaseWaitState.AutoVisitPending, nextTick: Now, course: CoursePhase.Dessert);
@@ -326,7 +326,7 @@ public class AdvanceDiningCommandHandlerTests
     }
 
     [Fact]
-    public async Task LeavingGroup_LeavesOnceTheTimerIsDue_NotBefore()
+    public async Task LeavingGroup_LeavesOnceTheTimerIsDue_NotBeforeAsync()
     {
         var (restaurant, group) = Scenario(DiningVisit.Bill, GroupPhaseWaitState.Serving, nextTick: Now + 1, course: CoursePhase.Done);
         group.LifecycleState = GroupLifecycleState.Leaving;
@@ -342,7 +342,7 @@ public class AdvanceDiningCommandHandlerTests
     // ---------- delivery ----------
 
     [Fact]
-    public async Task ReadyStationItem_IsDelivered_AndGetsAnEatingTimer()
+    public async Task ReadyStationItem_IsDelivered_AndGetsAnEatingTimerAsync()
     {
         var steak = Item(1, 1, 5, ItemPhase.EntryMain, OrderItemStatus.Ready);
         var (restaurant, _) = Scenario(DiningVisit.Refill, GroupPhaseWaitState.Serving, nextTick: 0, course: CoursePhase.EntryMain, items: new[] { steak });
@@ -354,7 +354,7 @@ public class AdvanceDiningCommandHandlerTests
     }
 
     [Fact]
-    public async Task QueuedPickupDrink_IsAttempted_ButAQueuedStationItemIsLeftToTheKitchen()
+    public async Task QueuedPickupDrink_IsAttempted_ButAQueuedStationItemIsLeftToTheKitchenAsync()
     {
         var water = Item(1, 1, 1, ItemPhase.Drinks, OrderItemStatus.Queued);
         var steak = Item(2, 2, 5, ItemPhase.EntryMain, OrderItemStatus.Queued);
@@ -367,7 +367,7 @@ public class AdvanceDiningCommandHandlerTests
     }
 
     [Fact]
-    public async Task FailedDelivery_IsRetriedSilently_NoConsumeTimerAndNoReportedFailure()
+    public async Task FailedDelivery_IsRetriedSilently_NoConsumeTimerAndNoReportedFailureAsync()
     {
         _deliver.Handle(Arg.Any<DeliverOrderItemCommand>(), Arg.Any<CancellationToken>()).Returns(Result.Failure("no idle waiter"));
         var steak = Item(1, 1, 5, ItemPhase.EntryMain, OrderItemStatus.Ready);
@@ -380,7 +380,7 @@ public class AdvanceDiningCommandHandlerTests
     }
 
     [Fact]
-    public async Task NoActiveGroups_DoesNothingAndSkipsTheMenuLookup()
+    public async Task NoActiveGroups_DoesNothingAndSkipsTheMenuLookupAsync()
     {
         var (restaurant, group) = Scenario(DiningVisit.Drinks, GroupPhaseWaitState.AutoVisitPending, nextTick: Now);
         restaurant.CustomerService.ActiveGroups.Remove(group);

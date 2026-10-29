@@ -8,7 +8,7 @@ namespace RestaurantSim.Infrastructure.Tests.Persistence;
 public class InMemoryRestaurantRepositoryTests
 {
     [Fact]
-    public async Task GetAsync_ReturnsNull_WhenRestaurantDoesNotExist()
+    public async Task GetAsync_ReturnsNull_WhenRestaurantDoesNotExistAsync()
     {
         var repository = new InMemoryRestaurantRepository();
 
@@ -18,7 +18,7 @@ public class InMemoryRestaurantRepositoryTests
     }
 
     [Fact]
-    public async Task SaveAsync_ThenGetAsync_ReturnsTheSameRestaurant()
+    public async Task SaveAsync_ThenGetAsync_ReturnsTheSameRestaurantAsync()
     {
         var repository = new InMemoryRestaurantRepository();
         var restaurant = CreateMinimalRestaurant();
@@ -30,7 +30,7 @@ public class InMemoryRestaurantRepositoryTests
     }
 
     [Fact]
-    public async Task SaveAsync_Overwrites_WhenCalledTwiceForSameId()
+    public async Task SaveAsync_Overwrites_WhenCalledTwiceForSameIdAsync()
     {
         var repository = new InMemoryRestaurantRepository();
         var restaurant = CreateMinimalRestaurant();

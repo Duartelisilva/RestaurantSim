@@ -40,7 +40,7 @@ public class AdvanceKitchenCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_StartsCookingItem_WhenStationAndCookAvailableAndPlannedStartTickReached()
+    public async Task Handle_StartsCookingItem_WhenStationAndCookAvailableAndPlannedStartTickReachedAsync()
     {
         var (restaurant, item, _, station, cook) = BuildQueuedItemScenario(simulationTick: 100, plannedStartTick: 100);
         SetupRepos(restaurant);
@@ -56,7 +56,7 @@ public class AdvanceKitchenCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_DoesNotStart_WhenPlannedStartTickNotYetReached()
+    public async Task Handle_DoesNotStart_WhenPlannedStartTickNotYetReachedAsync()
     {
         var (restaurant, item, _, _, _) = BuildQueuedItemScenario(simulationTick: 100, plannedStartTick: 105);
         SetupRepos(restaurant);
@@ -67,7 +67,7 @@ public class AdvanceKitchenCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_DoesNotStart_WhenStationIsFull()
+    public async Task Handle_DoesNotStart_WhenStationIsFullAsync()
     {
         var (restaurant, item, _, station, _) = BuildQueuedItemScenario(simulationTick: 100, plannedStartTick: 100, stationCapacity: 1);
         station.OccupiedSlots.Add(999);
@@ -79,7 +79,7 @@ public class AdvanceKitchenCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_DoesNotStart_WhenNoIdleCook()
+    public async Task Handle_DoesNotStart_WhenNoIdleCookAsync()
     {
         var (restaurant, item, _, _, cook) = BuildQueuedItemScenario(simulationTick: 100, plannedStartTick: 100);
         cook.State = StaffState.Busy;
@@ -91,7 +91,7 @@ public class AdvanceKitchenCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_CompletesItem_AfterEffectivePrepTicksElapse_SingleItemTicket()
+    public async Task Handle_CompletesItem_AfterEffectivePrepTicksElapse_SingleItemTicketAsync()
     {
         var (restaurant, item, _, station, cook) = BuildQueuedItemScenario(simulationTick: 100, plannedStartTick: 90);
         StartCooking(item, station, cook, cookingStartedAtTick: 90); // needs 10 ticks -> done exactly at 100
@@ -107,7 +107,7 @@ public class AdvanceKitchenCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_DoesNotComplete_BeforeEffectivePrepTicksElapse()
+    public async Task Handle_DoesNotComplete_BeforeEffectivePrepTicksElapseAsync()
     {
         var (restaurant, item, _, station, cook) = BuildQueuedItemScenario(simulationTick: 95, plannedStartTick: 90);
         StartCooking(item, station, cook, cookingStartedAtTick: 90); // needs 10 ticks, only 5 elapsed
@@ -119,7 +119,7 @@ public class AdvanceKitchenCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_RollsHighQuality_WhenRandomRollIsLowEnough()
+    public async Task Handle_RollsHighQuality_WhenRandomRollIsLowEnoughAsync()
     {
         var (restaurant, item, _, station, cook) = BuildQueuedItemScenario(simulationTick: 100, plannedStartTick: 90);
         StartCooking(item, station, cook, cookingStartedAtTick: 90);
@@ -132,7 +132,7 @@ public class AdvanceKitchenCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_HoldsUnderLamp_WhenSiblingDelayIsShortAndLampHasRoom()
+    public async Task Handle_HoldsUnderLamp_WhenSiblingDelayIsShortAndLampHasRoomAsync()
     {
         // ticket.SubmittedAtTick=90, CurrentTick=100 -> WaitPressure=0.5,
         // EffectiveThreshold = 6 x (1-0.5) = 3 (default fallback values).
@@ -157,7 +157,7 @@ public class AdvanceKitchenCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_ReInforms_WhenSiblingDelayIsLong_AndAppliesMoodPenalty()
+    public async Task Handle_ReInforms_WhenSiblingDelayIsLong_AndAppliesMoodPenaltyAsync()
     {
         // Same threshold math as above (EffectiveThreshold=3). itemB now started
         // at 95 -> projects to finish at 105 -> holdTicks = 5 > 3 -> RE-INFORM.
@@ -204,7 +204,7 @@ public class AdvanceKitchenCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_ReturnsFailure_WhenRestaurantDoesNotExist()
+    public async Task Handle_ReturnsFailure_WhenRestaurantDoesNotExistAsync()
     {
         _repository.GetAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns((Restaurant?)null);
 

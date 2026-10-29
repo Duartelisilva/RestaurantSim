@@ -14,7 +14,7 @@ public class SeatGroupCommandValidatorTests
     private readonly IRestaurantRepository _repository = Substitute.For<IRestaurantRepository>();
 
     [Fact]
-    public async Task Validate_Succeeds_WhenGroupIsQueuedAndClusterFits()
+    public async Task Validate_Succeeds_WhenGroupIsQueuedAndClusterFitsAsync()
     {
         var restaurant = BuildRestaurant();
         _repository.GetAsync(restaurant.RestaurantId, Arg.Any<CancellationToken>()).Returns(restaurant);
@@ -26,7 +26,7 @@ public class SeatGroupCommandValidatorTests
     }
 
     [Fact]
-    public async Task Validate_Fails_WhenGroupIsNotQueued()
+    public async Task Validate_Fails_WhenGroupIsNotQueuedAsync()
     {
         var restaurant = BuildRestaurant();
         _repository.GetAsync(restaurant.RestaurantId, Arg.Any<CancellationToken>()).Returns(restaurant);
@@ -38,7 +38,7 @@ public class SeatGroupCommandValidatorTests
     }
 
     [Fact]
-    public async Task Validate_Fails_WhenClusterIsAlreadyOccupied()
+    public async Task Validate_Fails_WhenClusterIsAlreadyOccupiedAsync()
     {
         var restaurant = BuildRestaurant();
         restaurant.Floor.Clusters[0].OccupiedBy = 999;

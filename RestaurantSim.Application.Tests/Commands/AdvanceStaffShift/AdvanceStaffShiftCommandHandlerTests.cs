@@ -22,7 +22,7 @@ public class AdvanceStaffShiftCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_ClocksIn_WhenWithinShiftAndCurrentlyOffShift()
+    public async Task Handle_ClocksIn_WhenWithinShiftAndCurrentlyOffShiftAsync()
     {
         var restaurant = BuildRestaurant(simulationTick: 800); // 13:20, within lunch 12:00-15:00
         var staff = AddStaff(restaurant, StaffRole.Waiter, StaffState.OffShift);
@@ -34,7 +34,7 @@ public class AdvanceStaffShiftCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_ClocksOut_WhenPastShiftEndAndNoDemand()
+    public async Task Handle_ClocksOut_WhenPastShiftEndAndNoDemandAsync()
     {
         var restaurant = BuildRestaurant(simulationTick: 950); // 15:50, past lunch end (900)
         var staff = AddStaff(restaurant, StaffRole.Waiter, StaffState.Idle);
@@ -49,7 +49,7 @@ public class AdvanceStaffShiftCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_BlocksClockOut_WhenDemandExistsAndNoOtherCoverage()
+    public async Task Handle_BlocksClockOut_WhenDemandExistsAndNoOtherCoverageAsync()
     {
         var restaurant = BuildRestaurant(simulationTick: 950);
         var staff = AddStaff(restaurant, StaffRole.Waiter, StaffState.Idle);
@@ -62,7 +62,7 @@ public class AdvanceStaffShiftCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_AllowsClockOut_WhenAnotherStaffOfSameRoleCovers()
+    public async Task Handle_AllowsClockOut_WhenAnotherStaffOfSameRoleCoversAsync()
     {
         var restaurant = BuildRestaurant(simulationTick: 950);
         var staffA = AddStaff(restaurant, StaffRole.Waiter, StaffState.Idle, staffId: 1);
@@ -79,7 +79,7 @@ public class AdvanceStaffShiftCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_DoesNotClockOut_BusyStaff_RegardlessOfShiftEnd()
+    public async Task Handle_DoesNotClockOut_BusyStaff_RegardlessOfShiftEndAsync()
     {
         var restaurant = BuildRestaurant(simulationTick: 950);
         var staff = AddStaff(restaurant, StaffRole.Waiter, StaffState.Busy);
@@ -91,7 +91,7 @@ public class AdvanceStaffShiftCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_AccruesFatigue_AtOvertimeRate_WhenHeldPastShiftEnd()
+    public async Task Handle_AccruesFatigue_AtOvertimeRate_WhenHeldPastShiftEndAsync()
     {
         var restaurant = BuildRestaurant(simulationTick: 950);
         var staff = AddStaff(restaurant, StaffRole.Waiter, StaffState.Idle);
@@ -104,7 +104,7 @@ public class AdvanceStaffShiftCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_AccruesFatigue_AtNormalRate_WithinShift()
+    public async Task Handle_AccruesFatigue_AtNormalRate_WithinShiftAsync()
     {
         var restaurant = BuildRestaurant(simulationTick: 800); // within lunch
         var staff = AddStaff(restaurant, StaffRole.Waiter, StaffState.Idle);
@@ -116,7 +116,7 @@ public class AdvanceStaffShiftCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_DoesNotAccrueFatigue_WhileOffShift()
+    public async Task Handle_DoesNotAccrueFatigue_WhileOffShiftAsync()
     {
         var restaurant = BuildRestaurant(simulationTick: 100); // well before any shift
         var staff = AddStaff(restaurant, StaffRole.Waiter, StaffState.OffShift);
@@ -128,7 +128,7 @@ public class AdvanceStaffShiftCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_ClampsFatigueAtOne()
+    public async Task Handle_ClampsFatigueAtOneAsync()
     {
         var restaurant = BuildRestaurant(simulationTick: 800);
         var staff = AddStaff(restaurant, StaffRole.Waiter, StaffState.Idle);
@@ -141,7 +141,7 @@ public class AdvanceStaffShiftCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_ReturnsFailure_WhenRestaurantDoesNotExist()
+    public async Task Handle_ReturnsFailure_WhenRestaurantDoesNotExistAsync()
     {
         _repository.GetAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns((Restaurant?)null);
 

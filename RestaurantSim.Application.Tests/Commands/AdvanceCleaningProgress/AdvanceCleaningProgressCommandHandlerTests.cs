@@ -24,7 +24,7 @@ public class AdvanceCleaningProgressCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_ProgressesTableCleaning_ForBusyBusser()
+    public async Task Handle_ProgressesTableCleaning_ForBusyBusserAsync()
     {
         var (restaurant, busser, table) = BuildScenario(taskType: TaskType.CleanTable, targetId: 1, initialProgress: 0f);
         SetupConfig(restaurant);
@@ -37,7 +37,7 @@ public class AdvanceCleaningProgressCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_CompletesTableCleaning_AndFreesBusser_WhenProgressReaches100()
+    public async Task Handle_CompletesTableCleaning_AndFreesBusser_WhenProgressReaches100Async()
     {
         var (restaurant, busser, table) = BuildScenario(taskType: TaskType.CleanTable, targetId: 1, initialProgress: 99.9f);
         SetupConfig(restaurant);
@@ -53,7 +53,7 @@ public class AdvanceCleaningProgressCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_CompletesBathroomCleaning_WhenCleanlinessReaches100()
+    public async Task Handle_CompletesBathroomCleaning_WhenCleanlinessReaches100Async()
     {
         var restaurant = BuildBaseRestaurant();
         var bathroom = new Bathroom
@@ -74,7 +74,7 @@ public class AdvanceCleaningProgressCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_DoesNothing_WhenNoBusyBussers()
+    public async Task Handle_DoesNothing_WhenNoBusyBussersAsync()
     {
         var restaurant = BuildBaseRestaurant();
         SetupConfig(restaurant);
@@ -86,7 +86,7 @@ public class AdvanceCleaningProgressCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_ReturnsFailure_WhenRestaurantDoesNotExist()
+    public async Task Handle_ReturnsFailure_WhenRestaurantDoesNotExistAsync()
     {
         _repository.GetAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns((Restaurant?)null);
 

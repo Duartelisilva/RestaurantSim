@@ -28,7 +28,7 @@ public class RestaurantTickProcessorSingleRestaurantTests
     }
 
     [Fact]
-    public async Task AdvanceRestaurantAsync_TicksOnlyTheGivenRestaurant()
+    public async Task AdvanceRestaurantAsync_TicksOnlyTheGivenRestaurantAsync()
     {
         var a = Build();
         var b = Build();

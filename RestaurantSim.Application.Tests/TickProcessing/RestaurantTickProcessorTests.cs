@@ -34,7 +34,7 @@ public class RestaurantTickProcessorTests
     }
 
     [Fact]
-    public async Task AdvanceAllRestaurantsAsync_IncrementsSimulationTick_ForEachRestaurant()
+    public async Task AdvanceAllRestaurantsAsync_IncrementsSimulationTick_ForEachRestaurantAsync()
     {
         var restaurant = BuildRestaurant(simulationTick: 100);
         _repository.GetAllAsync(Arg.Any<CancellationToken>()).Returns(new List<Restaurant> { restaurant });
@@ -45,7 +45,7 @@ public class RestaurantTickProcessorTests
     }
 
     [Fact]
-    public async Task AdvanceAllRestaurantsAsync_DispatchesAllEightCommands_PerRestaurant()
+    public async Task AdvanceAllRestaurantsAsync_DispatchesAllEightCommands_PerRestaurantAsync()
     {
         var restaurant = BuildRestaurant(simulationTick: 100);
         _repository.GetAllAsync(Arg.Any<CancellationToken>()).Returns(new List<Restaurant> { restaurant });
@@ -63,7 +63,7 @@ public class RestaurantTickProcessorTests
     }
 
     [Fact]
-    public async Task AdvanceAllRestaurantsAsync_RunsAutoManagerPass_PerRestaurant()
+    public async Task AdvanceAllRestaurantsAsync_RunsAutoManagerPass_PerRestaurantAsync()
     {
         var restaurant = BuildRestaurant(simulationTick: 100);
         _repository.GetAllAsync(Arg.Any<CancellationToken>()).Returns(new List<Restaurant> { restaurant });
@@ -74,7 +74,7 @@ public class RestaurantTickProcessorTests
     }
 
     [Fact]
-    public async Task AdvanceAllRestaurantsAsync_ContinuesProcessing_WhenACommandReturnsFailure()
+    public async Task AdvanceAllRestaurantsAsync_ContinuesProcessing_WhenACommandReturnsFailureAsync()
     {
         var restaurantA = BuildRestaurant(simulationTick: 100);
         var restaurantB = BuildRestaurant(simulationTick: 200);
@@ -88,7 +88,7 @@ public class RestaurantTickProcessorTests
     }
 
     [Fact]
-    public async Task AdvanceAllRestaurantsAsync_ContinuesProcessing_WhenAutoManagerThrows()
+    public async Task AdvanceAllRestaurantsAsync_ContinuesProcessing_WhenAutoManagerThrowsAsync()
     {
         var restaurantA = BuildRestaurant(simulationTick: 100);
         var restaurantB = BuildRestaurant(simulationTick: 200);
@@ -103,7 +103,7 @@ public class RestaurantTickProcessorTests
     }
 
     [Fact]
-    public async Task AdvanceAllRestaurantsAsync_DoesNothing_WhenNoRestaurantsExist()
+    public async Task AdvanceAllRestaurantsAsync_DoesNothing_WhenNoRestaurantsExistAsync()
     {
         _repository.GetAllAsync(Arg.Any<CancellationToken>()).Returns(new List<Restaurant>());
 

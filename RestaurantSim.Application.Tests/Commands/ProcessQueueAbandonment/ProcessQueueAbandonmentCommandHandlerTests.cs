@@ -24,7 +24,7 @@ public class ProcessQueueAbandonmentCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_RemovesGroup_WhenAverageMoodBelowThreshold()
+    public async Task Handle_RemovesGroup_WhenAverageMoodBelowThresholdAsync()
     {
         var restaurant = BuildRestaurant(reputation: 50f);
         var group = AddGroup(restaurant, groupId: 1, moods: new[] { 5f, 10f }); // avg 7.5, below default 15
@@ -41,7 +41,7 @@ public class ProcessQueueAbandonmentCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_AppliesFlatReputationPenalty_WithNoWitnessedScaling()
+    public async Task Handle_AppliesFlatReputationPenalty_WithNoWitnessedScalingAsync()
     {
         var restaurant = BuildRestaurant(reputation: 50f);
         AddGroup(restaurant, groupId: 1, moods: new[] { 5f });
@@ -55,7 +55,7 @@ public class ProcessQueueAbandonmentCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_AppliesSamePenalty_RegardlessOfOtherGroupsInQueue()
+    public async Task Handle_AppliesSamePenalty_RegardlessOfOtherGroupsInQueueAsync()
     {
         var restaurantAlone = BuildRestaurant(reputation: 50f);
         AddGroup(restaurantAlone, groupId: 1, moods: new[] { 5f });
@@ -75,7 +75,7 @@ public class ProcessQueueAbandonmentCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_KeepsGroup_WhenAverageMoodAtOrAboveThreshold()
+    public async Task Handle_KeepsGroup_WhenAverageMoodAtOrAboveThresholdAsync()
     {
         var restaurant = BuildRestaurant(reputation: 50f);
         var group = AddGroup(restaurant, groupId: 1, moods: new[] { 20f, 30f }); // avg 25, above default 15
@@ -91,7 +91,7 @@ public class ProcessQueueAbandonmentCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_ProcessesMultipleGroups_InOneCall()
+    public async Task Handle_ProcessesMultipleGroups_InOneCallAsync()
     {
         var restaurant = BuildRestaurant(reputation: 50f);
         AddGroup(restaurant, groupId: 1, moods: new[] { 5f });
@@ -108,7 +108,7 @@ public class ProcessQueueAbandonmentCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_NeverDropsReputationBelowZero()
+    public async Task Handle_NeverDropsReputationBelowZeroAsync()
     {
         var restaurant = BuildRestaurant(reputation: 0.2f);
         AddGroup(restaurant, groupId: 1, moods: new[] { 5f });
@@ -121,7 +121,7 @@ public class ProcessQueueAbandonmentCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_ReturnsFailure_WhenRestaurantDoesNotExist()
+    public async Task Handle_ReturnsFailure_WhenRestaurantDoesNotExistAsync()
     {
         _repository.GetAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns((Restaurant?)null);
 

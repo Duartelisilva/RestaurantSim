@@ -42,7 +42,7 @@ public class PlaceOrderCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_CreatesNewOrder_OnFirstDrinksOrder()
+    public async Task Handle_CreatesNewOrder_OnFirstDrinksOrderAsync()
     {
         var restaurant = BuildRestaurant(out var group, clusterId: 10);
         SetupConfig(restaurant);
@@ -66,7 +66,7 @@ public class PlaceOrderCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_AppendsToExistingOrder_OnSubsequentPhase()
+    public async Task Handle_AppendsToExistingOrder_OnSubsequentPhaseAsync()
     {
         var restaurant = BuildRestaurant(out var group, clusterId: 10);
         SetupConfig(restaurant);
@@ -88,7 +88,7 @@ public class PlaceOrderCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_DoesNotRegressCoursePhase_OnMidMealDrinksRefill()
+    public async Task Handle_DoesNotRegressCoursePhase_OnMidMealDrinksRefillAsync()
     {
         var restaurant = BuildRestaurant(out var group, clusterId: 10);
         SetupConfig(restaurant);
@@ -108,7 +108,7 @@ public class PlaceOrderCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_AssignsSequentialOrderItemIds()
+    public async Task Handle_AssignsSequentialOrderItemIdsAsync()
     {
         var restaurant = BuildRestaurant(out var group, clusterId: 10);
         SetupConfig(restaurant);
@@ -123,7 +123,7 @@ public class PlaceOrderCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_ReturnsFailure_WhenGroupIsNotActive()
+    public async Task Handle_ReturnsFailure_WhenGroupIsNotActiveAsync()
     {
         var restaurant = BuildRestaurant(out _, clusterId: 10);
         SetupConfig(restaurant);
@@ -138,7 +138,7 @@ public class PlaceOrderCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_ReturnsFailure_WhenRestaurantDoesNotExist()
+    public async Task Handle_ReturnsFailure_WhenRestaurantDoesNotExistAsync()
     {
         _repository.GetAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns((Restaurant?)null);
 
@@ -153,7 +153,7 @@ public class PlaceOrderCommandHandlerTests
     // bypassing the validator entirely. This is the whole point of the refactor. ---
 
     [Fact]
-    public async Task Handle_RejectsInvalidPhaseTransition_EvenWithoutTheValidator()
+    public async Task Handle_RejectsInvalidPhaseTransition_EvenWithoutTheValidatorAsync()
     {
         var restaurant = BuildRestaurant(out var group, clusterId: 10);
         SetupConfig(restaurant);
@@ -171,7 +171,7 @@ public class PlaceOrderCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_RejectsKidsMenuViolation_EvenWithoutTheValidator()
+    public async Task Handle_RejectsKidsMenuViolation_EvenWithoutTheValidatorAsync()
     {
         var restaurant = BuildRestaurant(out var group, clusterId: 10, secondMemberIsKid: true);
         SetupConfig(restaurant);

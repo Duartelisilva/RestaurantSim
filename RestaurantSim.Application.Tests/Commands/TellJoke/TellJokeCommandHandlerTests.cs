@@ -25,7 +25,7 @@ public class TellJokeCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_SuccessRoll_AppliesPositiveDelta_ToPresentMembers()
+    public async Task Handle_SuccessRoll_AppliesPositiveDelta_ToPresentMembersAsync()
     {
         var (restaurant, cluster, customer) = BuildScenario(charisma: 0.8f, mood: 50f); // Mid tier
         _repository.GetAsync(restaurant.RestaurantId, Arg.Any<CancellationToken>()).Returns(restaurant);
@@ -39,7 +39,7 @@ public class TellJokeCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_FailureRoll_AppliesNegativeDelta()
+    public async Task Handle_FailureRoll_AppliesNegativeDeltaAsync()
     {
         var (restaurant, cluster, customer) = BuildScenario(charisma: 0.2f, mood: 50f);
         _repository.GetAsync(restaurant.RestaurantId, Arg.Any<CancellationToken>()).Returns(restaurant);
@@ -51,7 +51,7 @@ public class TellJokeCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_AppliesOnePointFiveMultiplier_ToPersonTargetedMember_Only()
+    public async Task Handle_AppliesOnePointFiveMultiplier_ToPersonTargetedMember_OnlyAsync()
     {
         var (restaurant, cluster, customer) = BuildScenario(charisma: 0.8f, mood: 50f);
         _repository.GetAsync(restaurant.RestaurantId, Arg.Any<CancellationToken>()).Returns(restaurant);
@@ -64,7 +64,7 @@ public class TellJokeCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_ReducesEffectiveCharisma_AsRecentJokeCountIncreases()
+    public async Task Handle_ReducesEffectiveCharisma_AsRecentJokeCountIncreasesAsync()
     {
         // JokeFatigueMultiplier(4) = max(0.2, 1 - 0.25*4) = max(0.2, 0) = 0.2
         var (restaurant, cluster, _) = BuildScenario(charisma: 1.0f, mood: 50f);
@@ -78,7 +78,7 @@ public class TellJokeCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_IncrementsRecentJokeCount_AndUpdatesLastJokeTick()
+    public async Task Handle_IncrementsRecentJokeCount_AndUpdatesLastJokeTickAsync()
     {
         var (restaurant, cluster, _) = BuildScenario(charisma: 0.8f, mood: 50f);
         restaurant.SimulationTick = 500;
@@ -92,7 +92,7 @@ public class TellJokeCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_ReturnsFailure_WhenClusterIsNotOccupied()
+    public async Task Handle_ReturnsFailure_WhenClusterIsNotOccupiedAsync()
     {
         var (restaurant, cluster, _) = BuildScenario(charisma: 0.8f, mood: 50f);
         cluster.OccupiedBy = null;
@@ -104,7 +104,7 @@ public class TellJokeCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_ReturnsFailure_WhenRestaurantDoesNotExist()
+    public async Task Handle_ReturnsFailure_WhenRestaurantDoesNotExistAsync()
     {
         _repository.GetAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns((Restaurant?)null);
 

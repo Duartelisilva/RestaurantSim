@@ -27,7 +27,7 @@ public class EndDayCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_DoesNothing_WhenActiveGroupsPresent()
+    public async Task Handle_DoesNothing_WhenActiveGroupsPresentAsync()
     {
         var restaurant = BuildRestaurant(simulationTick: 1440);
         restaurant.CustomerService.ActiveGroups.Add(new CustomerGroup { GroupId = 1, PartySize = 1, Members = new List<Customer>(), ArrivalTick = 0 });
@@ -41,7 +41,7 @@ public class EndDayCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_DoesNothing_WhenNotYetPastClosing()
+    public async Task Handle_DoesNothing_WhenNotYetPastClosingAsync()
     {
         var restaurant = BuildRestaurant(simulationTick: 800);
         SetupConfig(restaurant);
@@ -53,7 +53,7 @@ public class EndDayCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_AppendsRealSnapshot_WithAccumulatedStats()
+    public async Task Handle_AppendsRealSnapshot_WithAccumulatedStatsAsync()
     {
         var restaurant = BuildRestaurant(simulationTick: 1440);
         restaurant.DailyStats.Revenue = 500m;
@@ -82,7 +82,7 @@ public class EndDayCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_ResetsAccumulator_ForNextDay()
+    public async Task Handle_ResetsAccumulator_ForNextDayAsync()
     {
         var restaurant = BuildRestaurant(simulationTick: 1440);
         restaurant.DailyStats.Revenue = 500m;
@@ -98,7 +98,7 @@ public class EndDayCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_EndsDay_AndAdvancesTickToNextOpening()
+    public async Task Handle_EndsDay_AndAdvancesTickToNextOpeningAsync()
     {
         var restaurant = BuildRestaurant(simulationTick: 1440);
         var bathroom = new Bathroom { BathroomId = 1, Gender = BathroomGender.Male, Position = new GridPosition(0, 0), Hitbox = new GridBounds(1, 1), Capacity = 1, MaxConcurrentCleaners = 1, CleanlinessScore = 40f };
@@ -116,7 +116,7 @@ public class EndDayCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_ReturnsFailure_WhenRestaurantDoesNotExist()
+    public async Task Handle_ReturnsFailure_WhenRestaurantDoesNotExistAsync()
     {
         _repository.GetAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns((Restaurant?)null);
 

@@ -22,7 +22,7 @@ public class SkipToNextMealPeriodCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_SkipsToNextPeriod_WhenInGapBetweenLunchAndDinner()
+    public async Task Handle_SkipsToNextPeriod_WhenInGapBetweenLunchAndDinnerAsync()
     {
         // 1000 minutes = 16:40, between lunch end (900=15:00) and dinner start (1140=19:00).
         var restaurant = BuildRestaurant(simulationTick: 1000);
@@ -35,7 +35,7 @@ public class SkipToNextMealPeriodCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_ReturnsFailure_WhenNotInAGap()
+    public async Task Handle_ReturnsFailure_WhenNotInAGapAsync()
     {
         var restaurant = BuildRestaurant(simulationTick: 800); // mid-lunch
         SetupConfig(restaurant);
@@ -47,7 +47,7 @@ public class SkipToNextMealPeriodCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_ReturnsFailure_WhenCustomersArePresent()
+    public async Task Handle_ReturnsFailure_WhenCustomersArePresentAsync()
     {
         var restaurant = BuildRestaurant(simulationTick: 1000);
         restaurant.CustomerService.ActiveGroups.Add(new CustomerGroup { GroupId = 1, PartySize = 1, Members = new List<Customer>(), ArrivalTick = 0 });
@@ -59,7 +59,7 @@ public class SkipToNextMealPeriodCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_ReturnsFailure_WhenQueueIsNotEmpty()
+    public async Task Handle_ReturnsFailure_WhenQueueIsNotEmptyAsync()
     {
         var restaurant = BuildRestaurant(simulationTick: 1000);
         restaurant.CustomerService.Queue.Add(new CustomerGroup { GroupId = 1, PartySize = 1, Members = new List<Customer>(), ArrivalTick = 0 });
@@ -71,7 +71,7 @@ public class SkipToNextMealPeriodCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_ReturnsFailure_WhenRestaurantDoesNotExist()
+    public async Task Handle_ReturnsFailure_WhenRestaurantDoesNotExistAsync()
     {
         _repository.GetAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns((Restaurant?)null);
 

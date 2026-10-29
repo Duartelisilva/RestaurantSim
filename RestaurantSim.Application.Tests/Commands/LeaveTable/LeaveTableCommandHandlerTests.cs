@@ -24,7 +24,7 @@ public class LeaveTableCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_RemovesGroup_FreesCluster_AndDirtiesTables()
+    public async Task Handle_RemovesGroup_FreesCluster_AndDirtiesTablesAsync()
     {
         var (restaurant, group, cluster, table1, table2) = BuildScenario();
         _repository.GetAsync(restaurant.RestaurantId, Arg.Any<CancellationToken>()).Returns(restaurant);
@@ -43,7 +43,7 @@ public class LeaveTableCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_RemovesOrder_FromActiveOrders()
+    public async Task Handle_RemovesOrder_FromActiveOrdersAsync()
     {
         var (restaurant, group, _, _, _) = BuildScenario();
         _repository.GetAsync(restaurant.RestaurantId, Arg.Any<CancellationToken>()).Returns(restaurant);
@@ -54,7 +54,7 @@ public class LeaveTableCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_ReturnsFailure_WhenGroupHasNotPaidYet()
+    public async Task Handle_ReturnsFailure_WhenGroupHasNotPaidYetAsync()
     {
         var (restaurant, group, _, _, _) = BuildScenario();
         group.LifecycleState = GroupLifecycleState.Seated;
@@ -67,7 +67,7 @@ public class LeaveTableCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_ReturnsFailure_WhenGroupIsNotActive()
+    public async Task Handle_ReturnsFailure_WhenGroupIsNotActiveAsync()
     {
         var (restaurant, _, _, _, _) = BuildScenario();
         _repository.GetAsync(restaurant.RestaurantId, Arg.Any<CancellationToken>()).Returns(restaurant);
@@ -78,7 +78,7 @@ public class LeaveTableCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_ReturnsFailure_WhenRestaurantDoesNotExist()
+    public async Task Handle_ReturnsFailure_WhenRestaurantDoesNotExistAsync()
     {
         _repository.GetAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns((Restaurant?)null);
 

@@ -9,7 +9,7 @@ namespace RestaurantSim.Infrastructure.Tests.SignalR;
 public sealed class GroupSeatedNotificationHandlerTests
 {
     [Fact]
-    public async Task Handle_SendsDtoToTheRestaurantGroupOnly()
+    public async Task Handle_SendsDtoToTheRestaurantGroupOnlyAsync()
     {
         var restaurantId = Guid.NewGuid();
         var hubContext = Substitute.For<IHubContext<RestaurantHub>>();

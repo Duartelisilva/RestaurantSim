@@ -20,7 +20,7 @@ public class BussersCleanBathroomCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_AssignsBusser_ToDirtyBathroom()
+    public async Task Handle_AssignsBusser_ToDirtyBathroomAsync()
     {
         var (restaurant, busser, bathroom) = BuildScenario(cleanlinessScore: 20f, maxConcurrentCleaners: 1, assignedCount: 0);
         _repository.GetAsync(restaurant.RestaurantId, Arg.Any<CancellationToken>()).Returns(restaurant);
@@ -34,7 +34,7 @@ public class BussersCleanBathroomCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_ReturnsFailure_WhenAlreadyFullyClean()
+    public async Task Handle_ReturnsFailure_WhenAlreadyFullyCleanAsync()
     {
         var (restaurant, busser, bathroom) = BuildScenario(cleanlinessScore: 100f, maxConcurrentCleaners: 1, assignedCount: 0);
         _repository.GetAsync(restaurant.RestaurantId, Arg.Any<CancellationToken>()).Returns(restaurant);
@@ -45,7 +45,7 @@ public class BussersCleanBathroomCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_ReturnsFailure_WhenMaxConcurrentCleanersReached()
+    public async Task Handle_ReturnsFailure_WhenMaxConcurrentCleanersReachedAsync()
     {
         var (restaurant, busser, bathroom) = BuildScenario(cleanlinessScore: 20f, maxConcurrentCleaners: 1, assignedCount: 0);
         var otherBusser = new StaffMember

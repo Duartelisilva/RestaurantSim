@@ -22,7 +22,7 @@ public class AdvanceMoodCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_DecaysMood_ForQueuedCustomers()
+    public async Task Handle_DecaysMood_ForQueuedCustomersAsync()
     {
         var restaurant = BuildRestaurant();
         var customer = AddQueuedCustomer(restaurant, patienceLevel: 0.5f, mood: 60);
@@ -36,7 +36,7 @@ public class AdvanceMoodCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_RecoversMood_ForSeatedCustomerWithNoOutstandingItems()
+    public async Task Handle_RecoversMood_ForSeatedCustomerWithNoOutstandingItemsAsync()
     {
         var restaurant = BuildRestaurant();
         var customer = AddSeatedCustomer(restaurant, patienceLevel: 0.5f, mood: 60, hasOutstandingItem: false);
@@ -50,7 +50,7 @@ public class AdvanceMoodCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_DecaysMood_ForSeatedCustomerWaitingOnCourse()
+    public async Task Handle_DecaysMood_ForSeatedCustomerWaitingOnCourseAsync()
     {
         var restaurant = BuildRestaurant();
         var customer = AddSeatedCustomer(restaurant, patienceLevel: 0.5f, mood: 60, hasOutstandingItem: true);
@@ -63,7 +63,7 @@ public class AdvanceMoodCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_SkipsAbsentCustomers_MoodFrozen()
+    public async Task Handle_SkipsAbsentCustomers_MoodFrozenAsync()
     {
         var restaurant = BuildRestaurant();
         var customer = AddSeatedCustomer(restaurant, patienceLevel: 0.5f, mood: 60, hasOutstandingItem: false);
@@ -76,7 +76,7 @@ public class AdvanceMoodCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_HigherPatience_DecaysSlower()
+    public async Task Handle_HigherPatience_DecaysSlowerAsync()
     {
         var restaurantLowPatience = BuildRestaurant();
         var lowPatienceCustomer = AddQueuedCustomer(restaurantLowPatience, patienceLevel: 0.1f, mood: 60);
@@ -94,7 +94,7 @@ public class AdvanceMoodCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_ClampsMoodWithinZeroToHundred()
+    public async Task Handle_ClampsMoodWithinZeroToHundredAsync()
     {
         var restaurant = BuildRestaurant();
         var customer = AddSeatedCustomer(restaurant, patienceLevel: 0.9f, mood: 99.8f, hasOutstandingItem: false);
@@ -106,7 +106,7 @@ public class AdvanceMoodCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_ReturnsFailure_WhenRestaurantDoesNotExist()
+    public async Task Handle_ReturnsFailure_WhenRestaurantDoesNotExistAsync()
     {
         _repository.GetAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns((Restaurant?)null);
 

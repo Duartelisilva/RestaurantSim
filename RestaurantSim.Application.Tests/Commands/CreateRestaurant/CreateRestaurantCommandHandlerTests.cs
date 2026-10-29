@@ -23,7 +23,7 @@ public class CreateRestaurantCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_CreatesRestaurant_WithSeededStaffMatchingRosterSeed()
+    public async Task Handle_CreatesRestaurant_WithSeededStaffMatchingRosterSeedAsync()
     {
         var config = BuildConfig();
         _presetRepository.GetAsync("default_diner", Arg.Any<CancellationToken>()).Returns(config);
@@ -43,7 +43,7 @@ public class CreateRestaurantCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_AssignsUniqueSequentialStaffIds()
+    public async Task Handle_AssignsUniqueSequentialStaffIdsAsync()
     {
         var config = BuildConfig();
         _presetRepository.GetAsync("default_diner", Arg.Any<CancellationToken>()).Returns(config);
@@ -58,7 +58,7 @@ public class CreateRestaurantCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_SeedsFloorLayout_FromLayoutRepository()
+    public async Task Handle_SeedsFloorLayout_FromLayoutRepositoryAsync()
     {
         var config = BuildConfig();
         var layout = BuildLayout();
@@ -77,7 +77,7 @@ public class CreateRestaurantCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_SetsStartingCashAndReputation_FromConfig()
+    public async Task Handle_SetsStartingCashAndReputation_FromConfigAsync()
     {
         var config = BuildConfig();
         _presetRepository.GetAsync("default_diner", Arg.Any<CancellationToken>()).Returns(config);
@@ -94,7 +94,7 @@ public class CreateRestaurantCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_ReturnsDifferentGuids_ForTwoSeparateCreations()
+    public async Task Handle_ReturnsDifferentGuids_ForTwoSeparateCreationsAsync()
     {
         var config = BuildConfig();
         _presetRepository.GetAsync("default_diner", Arg.Any<CancellationToken>()).Returns(config);
@@ -107,7 +107,7 @@ public class CreateRestaurantCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_ReturnsFailure_WhenConfigDoesNotExist()
+    public async Task Handle_ReturnsFailure_WhenConfigDoesNotExistAsync()
     {
         _presetRepository.GetAsync(Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns((RestaurantConfig?)null);
 
@@ -117,7 +117,7 @@ public class CreateRestaurantCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_ReturnsFailure_WhenLayoutDoesNotExist()
+    public async Task Handle_ReturnsFailure_WhenLayoutDoesNotExistAsync()
     {
         _presetRepository.GetAsync("default_diner", Arg.Any<CancellationToken>()).Returns(BuildConfig());
         _layoutRepository.GetByIdAsync(Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns((RestaurantLayout?)null);

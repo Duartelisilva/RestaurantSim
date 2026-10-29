@@ -29,7 +29,7 @@ public sealed class RestaurantHubTests
     }
 
     [Fact]
-    public async Task CreateRestaurantAsync_ReturnsId_WhenCommandSucceeds()
+    public async Task CreateRestaurantAsync_ReturnsId_WhenCommandSucceedsAsync()
     {
         var id = Guid.NewGuid();
         _sender.Send(Arg.Any<CreateRestaurantCommand>(), Arg.Any<CancellationToken>())
@@ -42,7 +42,7 @@ public sealed class RestaurantHubTests
     }
 
     [Fact]
-    public async Task CreateRestaurantAsync_ReturnsError_WhenCommandFails()
+    public async Task CreateRestaurantAsync_ReturnsError_WhenCommandFailsAsync()
     {
         _sender.Send(Arg.Any<CreateRestaurantCommand>(), Arg.Any<CancellationToken>())
             .Returns(Result<Guid>.Failure("unknown config"));
@@ -54,7 +54,7 @@ public sealed class RestaurantHubTests
     }
 
     [Fact]
-    public async Task JoinRestaurantAsync_AddsToGroupAndReturnsSnapshot_WhenRestaurantExists()
+    public async Task JoinRestaurantAsync_AddsToGroupAndReturnsSnapshot_WhenRestaurantExistsAsync()
     {
         var id = Guid.NewGuid();
         var snapshot = EmptySnapshot(id);
@@ -70,7 +70,7 @@ public sealed class RestaurantHubTests
     }
 
     [Fact]
-    public async Task JoinRestaurantAsync_LeavesGroupAndReturnsError_WhenRestaurantMissing()
+    public async Task JoinRestaurantAsync_LeavesGroupAndReturnsError_WhenRestaurantMissingAsync()
     {
         var id = Guid.NewGuid();
         _sender.Send(Arg.Any<GetRestaurantSnapshotQuery>(), Arg.Any<CancellationToken>())
@@ -84,7 +84,7 @@ public sealed class RestaurantHubTests
     }
 
     [Fact]
-    public async Task LeaveRestaurantAsync_RemovesFromGroup()
+    public async Task LeaveRestaurantAsync_RemovesFromGroupAsync()
     {
         var id = Guid.NewGuid();
 

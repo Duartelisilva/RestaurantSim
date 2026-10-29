@@ -19,7 +19,7 @@ public class BillPaidStatsHandlerTests
     }
 
     [Fact]
-    public async Task Handle_AddsRevenue_ToDailyStats()
+    public async Task Handle_AddsRevenue_ToDailyStatsAsync()
     {
         var restaurant = BuildRestaurant();
         _repository.GetAsync(restaurant.RestaurantId, Arg.Any<CancellationToken>()).Returns(restaurant);
@@ -31,7 +31,7 @@ public class BillPaidStatsHandlerTests
     }
 
     [Fact]
-    public async Task Handle_AccumulatesAcrossMultipleBills()
+    public async Task Handle_AccumulatesAcrossMultipleBillsAsync()
     {
         var restaurant = BuildRestaurant();
         _repository.GetAsync(restaurant.RestaurantId, Arg.Any<CancellationToken>()).Returns(restaurant);
@@ -43,7 +43,7 @@ public class BillPaidStatsHandlerTests
     }
 
     [Fact]
-    public async Task Handle_DoesNothing_WhenRestaurantDoesNotExist()
+    public async Task Handle_DoesNothing_WhenRestaurantDoesNotExistAsync()
     {
         _repository.GetAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns((Restaurant?)null);
 

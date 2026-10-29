@@ -26,7 +26,7 @@ public class PayBillCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_PaysBill_WhenAllItemsServed()
+    public async Task Handle_PaysBill_WhenAllItemsServedAsync()
     {
         var (restaurant, group) = BuildScenario(coursePhase: CoursePhase.Dessert, payerMood: 80, allServed: true);
         SetupConfig(restaurant);
@@ -45,7 +45,7 @@ public class PayBillCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_AllowsPayment_AfterEntryMain_WithoutDessert()
+    public async Task Handle_AllowsPayment_AfterEntryMain_WithoutDessertAsync()
     {
         var (restaurant, group) = BuildScenario(coursePhase: CoursePhase.EntryMain, payerMood: 80, allServed: true);
         SetupConfig(restaurant);
@@ -56,7 +56,7 @@ public class PayBillCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_ReturnsFailure_WhenNotAllItemsServed()
+    public async Task Handle_ReturnsFailure_WhenNotAllItemsServedAsync()
     {
         var (restaurant, group) = BuildScenario(coursePhase: CoursePhase.Dessert, payerMood: 80, allServed: false);
         SetupConfig(restaurant);
@@ -68,7 +68,7 @@ public class PayBillCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_ReturnsFailure_WhenCoursePhaseIsBeforeEntryMain()
+    public async Task Handle_ReturnsFailure_WhenCoursePhaseIsBeforeEntryMainAsync()
     {
         var (restaurant, group) = BuildScenario(coursePhase: CoursePhase.Drinks, payerMood: 80, allServed: true);
         SetupConfig(restaurant);
@@ -79,7 +79,7 @@ public class PayBillCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_HigherTip_WhenPayerMoodIsHigher()
+    public async Task Handle_HigherTip_WhenPayerMoodIsHigherAsync()
     {
         var (restaurantLowMood, groupLowMood) = BuildScenario(coursePhase: CoursePhase.Dessert, payerMood: 20, allServed: true);
         SetupConfig(restaurantLowMood);
@@ -104,7 +104,7 @@ public class PayBillCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_ReturnsFailure_WhenRestaurantDoesNotExist()
+    public async Task Handle_ReturnsFailure_WhenRestaurantDoesNotExistAsync()
     {
         _repository.GetAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns((Restaurant?)null);
 

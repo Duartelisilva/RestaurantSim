@@ -39,7 +39,7 @@ public class PlaceOrderCommandValidatorTests
     }
 
     [Fact]
-    public async Task Validate_Succeeds_ForFirstDrinksOrder()
+    public async Task Validate_Succeeds_ForFirstDrinksOrderAsync()
     {
         var (restaurant, group) = BuildScenario(coursePhase: CoursePhase.Seated);
         SetupRepositories(restaurant);
@@ -52,7 +52,7 @@ public class PlaceOrderCommandValidatorTests
     }
 
     [Fact]
-    public async Task Validate_Fails_WhenOrderingMainBeforeDrinks()
+    public async Task Validate_Fails_WhenOrderingMainBeforeDrinksAsync()
     {
         var (restaurant, group) = BuildScenario(coursePhase: CoursePhase.Seated); // never ordered drinks
         SetupRepositories(restaurant);
@@ -65,7 +65,7 @@ public class PlaceOrderCommandValidatorTests
     }
 
     [Fact]
-    public async Task Validate_Succeeds_ForDrinksRefill_MidMeal()
+    public async Task Validate_Succeeds_ForDrinksRefill_MidMealAsync()
     {
         // Drinks can be requested any time before the bill (business logic §1.4).
         var (restaurant, group) = BuildScenario(coursePhase: CoursePhase.Dessert);
@@ -79,7 +79,7 @@ public class PlaceOrderCommandValidatorTests
     }
 
     [Fact]
-    public async Task Validate_Fails_WhenGroupIsNotActive()
+    public async Task Validate_Fails_WhenGroupIsNotActiveAsync()
     {
         var (restaurant, _) = BuildScenario(coursePhase: CoursePhase.Seated);
         SetupRepositories(restaurant);
@@ -92,7 +92,7 @@ public class PlaceOrderCommandValidatorTests
     }
 
     [Fact]
-    public async Task Validate_Fails_WhenKidOrdersAdultItem()
+    public async Task Validate_Fails_WhenKidOrdersAdultItemAsync()
     {
         var (restaurant, group) = BuildScenario(coursePhase: CoursePhase.Seated, secondMemberIsKid: true);
         SetupRepositories(restaurant);
@@ -106,7 +106,7 @@ public class PlaceOrderCommandValidatorTests
     }
 
     [Fact]
-    public async Task Validate_Succeeds_WhenKidOrdersKidsItem()
+    public async Task Validate_Succeeds_WhenKidOrdersKidsItemAsync()
     {
         var (restaurant, group) = BuildScenario(coursePhase: CoursePhase.Seated, secondMemberIsKid: true);
         SetupRepositories(restaurant);
@@ -120,7 +120,7 @@ public class PlaceOrderCommandValidatorTests
     }
 
     [Fact]
-    public async Task Validate_Fails_WhenCustomerIsNotAMemberOfTheGroup()
+    public async Task Validate_Fails_WhenCustomerIsNotAMemberOfTheGroupAsync()
     {
         var (restaurant, group) = BuildScenario(coursePhase: CoursePhase.Seated);
         SetupRepositories(restaurant);
@@ -133,7 +133,7 @@ public class PlaceOrderCommandValidatorTests
     }
 
     [Fact]
-    public async Task Validate_Fails_WhenItemNotOnRestaurantMenu()
+    public async Task Validate_Fails_WhenItemNotOnRestaurantMenuAsync()
     {
         var (restaurant, group) = BuildScenario(coursePhase: CoursePhase.Seated);
         SetupRepositories(restaurant, menuItemIds: new[] { 4 }); // restaurant only serves item 4, not 1

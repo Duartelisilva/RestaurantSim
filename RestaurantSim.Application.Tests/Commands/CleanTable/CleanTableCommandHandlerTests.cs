@@ -20,7 +20,7 @@ public class CleanTableCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_AssignsBusser_ToDirtyTable()
+    public async Task Handle_AssignsBusser_ToDirtyTableAsync()
     {
         var (restaurant, busser, table) = BuildScenario(tableIsClean: false, busserState: StaffState.Idle);
         _repository.GetAsync(restaurant.RestaurantId, Arg.Any<CancellationToken>()).Returns(restaurant);
@@ -34,7 +34,7 @@ public class CleanTableCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_ReturnsFailure_WhenTableIsAlreadyClean()
+    public async Task Handle_ReturnsFailure_WhenTableIsAlreadyCleanAsync()
     {
         var (restaurant, busser, table) = BuildScenario(tableIsClean: true, busserState: StaffState.Idle);
         _repository.GetAsync(restaurant.RestaurantId, Arg.Any<CancellationToken>()).Returns(restaurant);
@@ -45,7 +45,7 @@ public class CleanTableCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_ReturnsFailure_WhenBusserIsNotIdle()
+    public async Task Handle_ReturnsFailure_WhenBusserIsNotIdleAsync()
     {
         var (restaurant, busser, table) = BuildScenario(tableIsClean: false, busserState: StaffState.Busy);
         _repository.GetAsync(restaurant.RestaurantId, Arg.Any<CancellationToken>()).Returns(restaurant);

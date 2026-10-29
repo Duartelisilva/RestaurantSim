@@ -19,7 +19,7 @@ public class GroupLeftStatsHandlerTests
     }
 
     [Fact]
-    public async Task Handle_CountsIndividualPeople_NotVisits()
+    public async Task Handle_CountsIndividualPeople_NotVisitsAsync()
     {
         var restaurant = BuildRestaurant();
         _repository.GetAsync(restaurant.RestaurantId, Arg.Any<CancellationToken>()).Returns(restaurant);
@@ -30,7 +30,7 @@ public class GroupLeftStatsHandlerTests
     }
 
     [Fact]
-    public async Task Handle_WeightsFinalMoodByPartySize()
+    public async Task Handle_WeightsFinalMoodByPartySizeAsync()
     {
         var restaurant = BuildRestaurant();
         _repository.GetAsync(restaurant.RestaurantId, Arg.Any<CancellationToken>()).Returns(restaurant);

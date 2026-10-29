@@ -44,7 +44,7 @@ public class DeliverOrderItemCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_DeliversReadyItem_HighQuality_AppliesPositiveMoodBonus()
+    public async Task Handle_DeliversReadyItem_HighQuality_AppliesPositiveMoodBonusAsync()
     {
         var (restaurant, item, group) = BuildScenario(OrderItemStatus.Ready, isHighQuality: true, hadFoodQualityEvent: false);
         var moodBefore = group.Members[0].Mood;
@@ -62,7 +62,7 @@ public class DeliverOrderItemCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_DeliversReadyItem_FoodQualityEvent_AppliesNegativeMoodBonus()
+    public async Task Handle_DeliversReadyItem_FoodQualityEvent_AppliesNegativeMoodBonusAsync()
     {
         var (restaurant, item, group) = BuildScenario(OrderItemStatus.Ready, isHighQuality: false, hadFoodQualityEvent: true);
         var moodBefore = group.Members[0].Mood;
@@ -74,7 +74,7 @@ public class DeliverOrderItemCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_DeliversReadyItem_StandardQuality_NoMoodChange()
+    public async Task Handle_DeliversReadyItem_StandardQuality_NoMoodChangeAsync()
     {
         var (restaurant, item, group) = BuildScenario(OrderItemStatus.Ready, isHighQuality: false, hadFoodQualityEvent: false);
         var moodBefore = group.Members[0].Mood;
@@ -86,7 +86,7 @@ public class DeliverOrderItemCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_AppliesHoldDecay_WhenItemWasHeldUnderLamp()
+    public async Task Handle_AppliesHoldDecay_WhenItemWasHeldUnderLampAsync()
     {
         var (restaurant, item, group) = BuildScenario(OrderItemStatus.HeldUnderLamp, isHighQuality: true, hadFoodQualityEvent: false, heldSinceTick: 90);
         restaurant.SimulationTick = 100;
@@ -104,7 +104,7 @@ public class DeliverOrderItemCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_ReturnsFailure_WhenStationItemIsNotReadyOrHeld()
+    public async Task Handle_ReturnsFailure_WhenStationItemIsNotReadyOrHeldAsync()
     {
         var (restaurant, item, _) = BuildScenario(OrderItemStatus.Cooking, isHighQuality: false, hadFoodQualityEvent: false);
         SetupRepos(restaurant);
@@ -116,7 +116,7 @@ public class DeliverOrderItemCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_ReturnsFailure_WhenNoIdleWaiterExists()
+    public async Task Handle_ReturnsFailure_WhenNoIdleWaiterExistsAsync()
     {
         var (restaurant, item, _) = BuildScenario(OrderItemStatus.Ready, isHighQuality: false, hadFoodQualityEvent: false);
         restaurant.StaffRoster.Staff[0].State = StaffState.Busy;
@@ -129,7 +129,7 @@ public class DeliverOrderItemCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_DoesNotApplyMoodBonus_WhenCustomerIsAbsentFromTable()
+    public async Task Handle_DoesNotApplyMoodBonus_WhenCustomerIsAbsentFromTableAsync()
     {
         var (restaurant, item, group) = BuildScenario(OrderItemStatus.Ready, isHighQuality: true, hadFoodQualityEvent: false);
         group.Members[0].IsPresentAtTable = false;
@@ -150,7 +150,7 @@ public class DeliverOrderItemCommandHandlerTests
     // --- New: pickup items (Drinks) — no station/cook, flat fetch-time gate ---
 
     [Fact]
-    public async Task Handle_DeliversPickupItem_WhenFetchTimeHasElapsed()
+    public async Task Handle_DeliversPickupItem_WhenFetchTimeHasElapsedAsync()
     {
         var (restaurant, _, group) = BuildScenario(OrderItemStatus.Ready, isHighQuality: false, hadFoodQualityEvent: false);
         var pickupItem = new OrderItem
@@ -172,7 +172,7 @@ public class DeliverOrderItemCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_ReturnsFailure_WhenPickupItemFetchTimeNotElapsed()
+    public async Task Handle_ReturnsFailure_WhenPickupItemFetchTimeNotElapsedAsync()
     {
         var (restaurant, _, _) = BuildScenario(OrderItemStatus.Ready, isHighQuality: false, hadFoodQualityEvent: false);
         var pickupItem = new OrderItem
@@ -191,7 +191,7 @@ public class DeliverOrderItemCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_ReturnsFailure_WhenRestaurantDoesNotExist()
+    public async Task Handle_ReturnsFailure_WhenRestaurantDoesNotExistAsync()
     {
         _repository.GetAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns((Restaurant?)null);
 

@@ -26,7 +26,7 @@ public class AdvanceMoodTickRateTests
     [InlineData(1)]
     [InlineData(2)]
     [InlineData(4)]
-    public async Task QueueWaitDecay_OneRealSecondOfTicks_IsTheSameAtAnyTickRate(int ticksPerRealSecond)
+    public async Task QueueWaitDecay_OneRealSecondOfTicks_IsTheSameAtAnyTickRateAsync(int ticksPerRealSecond)
     {
         var restaurant = BuildRestaurant();
         var customer = AddQueuedCustomer(restaurant, mood: 60);
@@ -40,7 +40,7 @@ public class AdvanceMoodTickRateTests
     }
 
     [Fact]
-    public async Task QueueWaitDecay_SingleTick_ScalesDownWithTheTickRate()
+    public async Task QueueWaitDecay_SingleTick_ScalesDownWithTheTickRateAsync()
     {
         var restaurant = BuildRestaurant();
         var customer = AddQueuedCustomer(restaurant, mood: 60);

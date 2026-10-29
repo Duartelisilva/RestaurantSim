@@ -29,7 +29,7 @@ public class EngineSessionTests
     }
 
     [Fact]
-    public async Task StartAsync_ConnectsCreatesJoinsAndLoadsTheStore()
+    public async Task StartAsync_ConnectsCreatesJoinsAndLoadsTheStoreAsync()
     {
         await _session.StartAsync("default_diner");
 
@@ -43,7 +43,7 @@ public class EngineSessionTests
     }
 
     [Fact]
-    public async Task StartAsync_WhenCreateFails_ReportsErrorAndStaysStartable()
+    public async Task StartAsync_WhenCreateFails_ReportsErrorAndStaysStartableAsync()
     {
         _engine.CreateRestaurantAsync("default_diner", Arg.Any<CancellationToken>())
             .Returns(HubResult<Guid>.Fail("unknown config"));
@@ -56,7 +56,7 @@ public class EngineSessionTests
     }
 
     [Fact]
-    public async Task StartAsync_CalledTwice_OnlyRunsOnce()
+    public async Task StartAsync_CalledTwice_OnlyRunsOnceAsync()
     {
         await _session.StartAsync("default_diner");
         await _session.StartAsync("default_diner");
@@ -65,7 +65,7 @@ public class EngineSessionTests
     }
 
     [Fact]
-    public async Task PushedEvents_AreRoutedIntoTheStoreAndLogged()
+    public async Task PushedEvents_AreRoutedIntoTheStoreAndLoggedAsync()
     {
         await _session.StartAsync("default_diner");
 
@@ -76,7 +76,7 @@ public class EngineSessionTests
     }
 
     [Fact]
-    public async Task BillPaid_UpdatesCashInTheStoreAndLogsIt()
+    public async Task BillPaid_UpdatesCashInTheStoreAndLogsItAsync()
     {
         await _session.StartAsync("default_diner");
 
@@ -87,7 +87,7 @@ public class EngineSessionTests
     }
 
     [Fact]
-    public async Task GroupTurnedAway_UpdatesReputationInTheStore()
+    public async Task GroupTurnedAway_UpdatesReputationInTheStoreAsync()
     {
         await _session.StartAsync("default_diner");
 
@@ -97,7 +97,7 @@ public class EngineSessionTests
     }
 
     [Fact]
-    public async Task Reconnect_RejoinsAndReloadsSnapshotAndClock()
+    public async Task Reconnect_RejoinsAndReloadsSnapshotAndClockAsync()
     {
         await _session.StartAsync("default_diner");
         var firstClock = _session.Clock;
@@ -117,7 +117,7 @@ public class EngineSessionTests
     }
 
     [Fact]
-    public async Task Connected_WithoutAPriorDrop_DoesNotRejoin()
+    public async Task Connected_WithoutAPriorDrop_DoesNotRejoinAsync()
     {
         await _session.StartAsync("default_diner");
 
@@ -136,7 +136,7 @@ public class EngineSessionTests
     }
 
     [Fact]
-    public async Task FailedResync_IsRetriedOnTheNextConnected()
+    public async Task FailedResync_IsRetriedOnTheNextConnectedAsync()
     {
         await _session.StartAsync("default_diner");
         _engine.JoinRestaurantAsync(_restaurantId, Arg.Any<CancellationToken>())
@@ -155,7 +155,7 @@ public class EngineSessionTests
     }
 
     [Fact]
-    public async Task CanReconnect_OnlyWhenDisconnectedWithAJoinedRestaurant()
+    public async Task CanReconnect_OnlyWhenDisconnectedWithAJoinedRestaurantAsync()
     {
         _session.CanReconnect.Should().BeFalse();
 

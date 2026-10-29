@@ -20,7 +20,7 @@ public sealed class RestaurantEventHandlersTests
     }
 
     [Fact]
-    public async Task GroupArrived_SendsDto()
+    public async Task GroupArrived_SendsDtoAsync()
     {
         var handler = new GroupArrivedNotificationHandler(_hubContext);
 
@@ -30,7 +30,7 @@ public sealed class RestaurantEventHandlersTests
     }
 
     [Fact]
-    public async Task GroupAbandonedQueue_SendsDto()
+    public async Task GroupAbandonedQueue_SendsDtoAsync()
     {
         var handler = new GroupAbandonedQueueNotificationHandler(_hubContext);
 
@@ -40,7 +40,7 @@ public sealed class RestaurantEventHandlersTests
     }
 
     [Fact]
-    public async Task GroupTurnedAway_SendsDtoWithAbsoluteReputation()
+    public async Task GroupTurnedAway_SendsDtoWithAbsoluteReputationAsync()
     {
         var handler = new GroupTurnedAwayNotificationHandler(_hubContext);
 
@@ -50,7 +50,7 @@ public sealed class RestaurantEventHandlersTests
     }
 
     [Fact]
-    public async Task BillPaid_SendsDtoWithAbsoluteCash()
+    public async Task BillPaid_SendsDtoWithAbsoluteCashAsync()
     {
         var handler = new BillPaidNotificationHandler(_hubContext);
 
@@ -60,7 +60,7 @@ public sealed class RestaurantEventHandlersTests
     }
 
     [Fact]
-    public async Task GroupLeft_SendsDtoWithoutStatisticsFields()
+    public async Task GroupLeft_SendsDtoWithoutStatisticsFieldsAsync()
     {
         var handler = new GroupLeftNotificationHandler(_hubContext);
 
@@ -70,7 +70,7 @@ public sealed class RestaurantEventHandlersTests
     }
 
     [Fact]
-    public async Task TableCleaned_SendsDto()
+    public async Task TableCleaned_SendsDtoAsync()
     {
         var handler = new TableCleanedNotificationHandler(_hubContext);
 

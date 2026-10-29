@@ -25,7 +25,7 @@ public class SpawnArrivalCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_DoesNothing_WhenNotYetDue()
+    public async Task Handle_DoesNothing_WhenNotYetDueAsync()
     {
         var restaurant = BuildRestaurant(simulationTick: 100, nextArrivalTick: 200);
         var config = BuildConfig();
@@ -39,7 +39,7 @@ public class SpawnArrivalCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_SpawnsGroup_WhenDueAndWithinActivePeriod()
+    public async Task Handle_SpawnsGroup_WhenDueAndWithinActivePeriodAsync()
     {
         // 12:30 (750 min into day) falls inside lunch (12:00-15:00).
         var restaurant = BuildRestaurant(simulationTick: 750, nextArrivalTick: 750);
@@ -60,7 +60,7 @@ public class SpawnArrivalCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_DoesNotSpawn_WhenOutsideActivePeriod()
+    public async Task Handle_DoesNotSpawn_WhenOutsideActivePeriodAsync()
     {
         // 03:00 (180 min into day) is outside both lunch and dinner.
         var restaurant = BuildRestaurant(simulationTick: 180, nextArrivalTick: 180);
@@ -75,7 +75,7 @@ public class SpawnArrivalCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_TurnsGroupAway_WhenQueueIsFull()
+    public async Task Handle_TurnsGroupAway_WhenQueueIsFullAsync()
     {
         var restaurant = BuildRestaurant(simulationTick: 750, nextArrivalTick: 750);
         var config = BuildConfig(maxQueueLength: 1);
@@ -99,7 +99,7 @@ public class SpawnArrivalCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_ReturnsFailure_WhenRestaurantDoesNotExist()
+    public async Task Handle_ReturnsFailure_WhenRestaurantDoesNotExistAsync()
     {
         _repository.GetAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns((Restaurant?)null);
 
