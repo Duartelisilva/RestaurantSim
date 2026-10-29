@@ -1,4 +1,4 @@
-﻿using FluentAssertions;
+using FluentAssertions;
 using MediatR;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
@@ -8,6 +8,7 @@ using RestaurantSim.Application.Commands.SeatGroup;
 using RestaurantSim.Application.Commands.TellJoke;
 using RestaurantSim.Application.Common;
 using RestaurantSim.AutoManager.Strategies.Seating;
+using RestaurantSim.AutoManager.Strategies.TableLayout;
 using RestaurantSim.AutoManager.Strategies.TaskPriority;
 using RestaurantSim.AutoManager.Strategies.WaiterAction;
 using RestaurantSim.Domain;
@@ -27,16 +28,17 @@ public class AutoManagerProcessorTests
     private readonly IWaiterActionStrategy _waiterActionStrategy = Substitute.For<IWaiterActionStrategy>();
     private readonly ILogger<AutoManagerProcessor> _logger = Substitute.For<ILogger<AutoManagerProcessor>>();
     private readonly AutoManagerProcessor _processor;
-
+    private readonly ITableLayoutStrategy _tableLayoutStrategy = Substitute.For<ITableLayoutStrategy>();
     public AutoManagerProcessorTests()
     {
-        _processor = new AutoManagerProcessor(_repository, _presetRepository, _sender, _seatingStrategy, _taskPriorityStrategy, _waiterActionStrategy, _logger);
+        _processor = new AutoManagerProcessor(_repository, _presetRepository, _sender, _seatingStrategy, _tableLayoutStrategy, _taskPriorityStrategy, _waiterActionStrategy, _logger);
+        _tableLayoutStrategy.DecideNextLayoutChange(Arg.Any<Restaurant>()).Returns((TableLayoutDecision?)null);
         SetupConfig();
         _seatingStrategy.DecideNextSeating(Arg.Any<Restaurant>()).Returns((ValueTuple<int, int>?)null);
     }
 
     [Fact]
-    public async Task RunPassAsync_DispatchesSeatGroupCommand_ForEachDecision_UntilStrategyReturnsNull()
+    public async Task RunPassAsync_DispatchesSeatGroupCommand_ForEachDecision_UntilStrategyReturnsNullAsync()
     {
         var restaurant = BuildRestaurant();
         _repository.GetAsync(restaurant.RestaurantId, Arg.Any<CancellationToken>()).Returns(restaurant);
@@ -51,7 +53,7 @@ public class AutoManagerProcessorTests
     }
 
     [Fact]
-    public async Task RunPassAsync_DispatchesTellJokeCommand_WhenWaiterActionStrategyDecides()
+    public async Task RunPassAsync_DispatchesTellJokeCommand_WhenWaiterActionStrategyDecidesAsync()
     {
         var restaurant = BuildRestaurant();
         _repository.GetAsync(restaurant.RestaurantId, Arg.Any<CancellationToken>()).Returns(restaurant);
@@ -64,7 +66,7 @@ public class AutoManagerProcessorTests
     }
 
     [Fact]
-    public async Task RunPassAsync_SkipsWaiterActionsEntirely_WhenToggleIsOff()
+    public async Task RunPassAsync_SkipsWaiterActionsEntirely_WhenToggleIsOffAsync()
     {
         var restaurant = BuildRestaurant();
         restaurant.AutoManagerToggles[AutoManagerSystem.WaiterActions] = false;
@@ -76,7 +78,7 @@ public class AutoManagerProcessorTests
     }
 
     [Fact]
-    public async Task RunPassAsync_DoesNotDispatchTellJoke_WhenStrategyReturnsNull()
+    public async Task RunPassAsync_DoesNotDispatchTellJoke_WhenStrategyReturnsNullAsync()
     {
         var restaurant = BuildRestaurant();
         _repository.GetAsync(restaurant.RestaurantId, Arg.Any<CancellationToken>()).Returns(restaurant);
@@ -88,7 +90,7 @@ public class AutoManagerProcessorTests
     }
 
     [Fact]
-    public async Task RunPassAsync_DoesNothing_WhenRestaurantDoesNotExist()
+    public async Task RunPassAsync_DoesNothing_WhenRestaurantDoesNotExistAsync()
     {
         _repository.GetAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns((Restaurant?)null);
 

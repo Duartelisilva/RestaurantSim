@@ -3,10 +3,13 @@ using Microsoft.Extensions.Logging;
 using RestaurantSim.Application.AutoManager;
 using RestaurantSim.Application.Commands.CleanBathroom;
 using RestaurantSim.Application.Commands.CleanTable;
+using RestaurantSim.Application.Commands.MergeClusters;
 using RestaurantSim.Application.Commands.SeatGroup;
+using RestaurantSim.Application.Commands.SplitCluster;
 using RestaurantSim.Application.Commands.TellJoke;
 using RestaurantSim.Application.Common;
 using RestaurantSim.AutoManager.Strategies.Seating;
+using RestaurantSim.AutoManager.Strategies.TableLayout;
 using RestaurantSim.AutoManager.Strategies.TaskPriority;
 using RestaurantSim.AutoManager.Strategies.WaiterAction;
 using RestaurantSim.Domain;
@@ -22,10 +25,15 @@ public sealed class AutoManagerProcessor : IAutoManagerRunner
     private const float DefaultAutoJokeCooldownSeconds = 60f;
     private const float DefaultMoodGapThreshold = 20f;
 
+    // A safety net: a seating pass is a handful of merges, splits and seatings. If a
+    // strategy bug ever made it endless, this ends the pass instead of hanging the tick.
+    private const int MaxSeatingPassSteps = 100;
+
     private readonly IRestaurantRepository _repository;
     private readonly IPresetRepository<RestaurantConfig> _presetRepository;
     private readonly ISender _sender;
     private readonly ISeatingStrategy _seatingStrategy;
+    private readonly ITableLayoutStrategy _tableLayoutStrategy;
     private readonly IStaffTaskPriorityStrategy _taskPriorityStrategy;
     private readonly IWaiterActionStrategy _waiterActionStrategy;
     private readonly ILogger<AutoManagerProcessor> _logger;
@@ -35,6 +43,7 @@ public sealed class AutoManagerProcessor : IAutoManagerRunner
         IPresetRepository<RestaurantConfig> presetRepository,
         ISender sender,
         ISeatingStrategy seatingStrategy,
+        ITableLayoutStrategy tableLayoutStrategy,
         IStaffTaskPriorityStrategy taskPriorityStrategy,
         IWaiterActionStrategy waiterActionStrategy,
         ILogger<AutoManagerProcessor> logger)
@@ -43,6 +52,7 @@ public sealed class AutoManagerProcessor : IAutoManagerRunner
         _presetRepository = presetRepository;
         _sender = sender;
         _seatingStrategy = seatingStrategy;
+        _tableLayoutStrategy = tableLayoutStrategy;
         _taskPriorityStrategy = taskPriorityStrategy;
         _waiterActionStrategy = waiterActionStrategy;
         _logger = logger;
@@ -71,28 +81,60 @@ public sealed class AutoManagerProcessor : IAutoManagerRunner
 
     private async Task RunSeatingPassAsync(Guid restaurantId, CancellationToken cancellationToken)
     {
-        while (true)
+        for (var step = 0; step < MaxSeatingPassSteps; step++)
         {
             var restaurant = await _repository.GetAsync(restaurantId, cancellationToken);
             if (restaurant is null) return;
 
+            // Tables first: put unneeded merged tables back, or push tables together for a
+            // party nothing else fits. Both decisions are about the table layout, so they
+            // follow the Seating toggle.
+            var layoutDecision = _tableLayoutStrategy.DecideNextLayoutChange(restaurant);
+            if (layoutDecision is not null)
+            {
+                if (!await TrySendAsync(restaurantId, ToCommand(restaurantId, layoutDecision), "table-layout", cancellationToken))
+                    break;
+
+                continue;
+            }
+
             var decision = _seatingStrategy.DecideNextSeating(restaurant);
             if (decision is null) break;
 
-            try
-            {
-                var result = await _sender.Send(new SeatGroupCommand(restaurantId, decision.Value.GroupId, decision.Value.ClusterId), cancellationToken);
-                if (result.IsFailure)
-                {
-                    _logger.LogWarning("AutoManager seating decision failed for restaurant {RestaurantId}: {Error}", restaurantId, result.Error);
-                    break;
-                }
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "AutoManager seating pass threw for restaurant {RestaurantId}", restaurantId);
+            var seat = new SeatGroupCommand(restaurantId, decision.Value.GroupId, decision.Value.ClusterId);
+            if (!await TrySendAsync(restaurantId, seat, "seating", cancellationToken))
                 break;
+        }
+    }
+
+    private static IRequest<Result> ToCommand(Guid restaurantId, TableLayoutDecision decision)
+    {
+        return decision switch
+        {
+            MergeClustersDecision merge => new MergeClustersCommand(restaurantId, merge.ClusterIds),
+            SplitClusterDecision split => new SplitClusterCommand(restaurantId, split.ClusterId),
+            _ => throw new InvalidOperationException($"Unknown table layout decision {decision.GetType().Name}.")
+        };
+    }
+
+    // Sends one decision as a command; false = it failed or threw, so the pass should stop.
+    private async Task<bool> TrySendAsync(Guid restaurantId, IRequest<Result> command, string pass, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var result = await _sender.Send(command, cancellationToken);
+            if (result.IsFailure)
+            {
+                _logger.LogWarning("AutoManager {Pass} decision failed for restaurant {RestaurantId}: {Error}", pass, restaurantId, result.Error);
+                return false;
             }
+
+            return true;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "AutoManager {Pass} pass threw for restaurant {RestaurantId}", pass, restaurantId);
+            return false;
         }
     }
 

@@ -17,6 +17,7 @@ using RestaurantSim.Infrastructure.SignalR;
 
 using RestaurantSim.AutoManager;
 using RestaurantSim.AutoManager.Strategies.Seating;
+using RestaurantSim.AutoManager.Strategies.TableLayout;
 using RestaurantSim.AutoManager.Strategies.TaskPriority;
 using RestaurantSim.AutoManager.Strategies.WaiterAction;
 
@@ -73,6 +74,7 @@ builder.Services.AddScoped<ISeatingStrategy, DefaultSeatingStrategy>();
 builder.Services.AddScoped<IAutoManagerRunner, AutoManagerProcessor>();
 builder.Services.AddScoped<IStaffTaskPriorityStrategy, DefaultStaffTaskPriorityStrategy>();
 builder.Services.AddScoped<IWaiterActionStrategy, DefaultWaiterActionStrategy>();
+builder.Services.AddScoped<ITableLayoutStrategy, DefaultTableLayoutStrategy>();
 
 var app = builder.Build();
 
