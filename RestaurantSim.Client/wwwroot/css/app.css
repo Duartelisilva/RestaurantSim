@@ -29,7 +29,30 @@ body {
 .floor .table.state-occupied { fill: #f3c97a; }
 .floor .table.state-reserved { fill: #b9c9f0; }
 .floor .table.state-needscleaning { fill: #d9d9d9; stroke: #c0392b; stroke-width: 2; }
-.floor .station { fill: #9ec5e8; }
+/* Dining stage of the group at an occupied table; after the state rules so it wins. */
+.floor .table.stage-ordering {
+    fill: #f3c97a;
+}
+
+.floor .table.stage-waitingforfood {
+    fill: #f0a07a;
+}
+
+.floor .table.stage-eating {
+    fill: #8fd3c7;
+}
+
+.floor .table.stage-paying {
+    fill: #c3aee6;
+}
+
+.floor .table.stage-leaving {
+    fill: #e6c0c0;
+}
+
+.floor .station {
+    fill: #9ec5e8;
+}
 .floor .heatlamp { fill: #f08a4b; }
 .floor .freezer { fill: #bfe3f0; }
 .floor .bathroom { fill: #c9b6e4; }

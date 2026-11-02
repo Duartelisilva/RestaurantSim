@@ -1,3 +1,4 @@
+using RestaurantSim.Client.Components;
 using RestaurantSim.Client.Engine;
 using RestaurantSim.Client.Time;
 using RestaurantSim.Contracts.Events;
@@ -33,6 +34,7 @@ public sealed class EngineSession : IDisposable
         _engine.GroupTurnedAway += OnGroupTurnedAway;
         _engine.GroupAbandonedQueue += OnGroupAbandonedQueue;
         _engine.GroupSeated += OnGroupSeated;
+        _engine.GroupDiningStageChanged += OnGroupDiningStageChanged;
         _engine.GroupLeft += OnGroupLeft;
         _engine.TableCleaned += OnTableCleaned;
         _engine.BillPaid += OnBillPaid;
@@ -203,6 +205,12 @@ public sealed class EngineSession : IDisposable
             AddLog($"[tick {dto.Tick}] group {dto.GroupId} seated at cluster {dto.ClusterId}");
     }
 
+    private void OnGroupDiningStageChanged(GroupDiningStageChangedDto dto)
+    {
+        if (_store.Apply(dto))
+            AddLog($"[tick {dto.Tick}] group {dto.GroupId}: {DiningLabels.Describe(dto.Stage, dto.NextVisit)}");
+    }
+
     private void OnGroupLeft(GroupLeftDto dto)
     {
         if (_store.Apply(dto))
@@ -239,6 +247,7 @@ public sealed class EngineSession : IDisposable
         _engine.GroupTurnedAway -= OnGroupTurnedAway;
         _engine.GroupAbandonedQueue -= OnGroupAbandonedQueue;
         _engine.GroupSeated -= OnGroupSeated;
+        _engine.GroupDiningStageChanged -= OnGroupDiningStageChanged;
         _engine.GroupLeft -= OnGroupLeft;
         _engine.TableCleaned -= OnTableCleaned;
         _engine.BillPaid -= OnBillPaid;

@@ -87,6 +87,20 @@ public class EngineSessionTests
     }
 
     [Fact]
+    public async Task GroupDiningStageChanged_UpdatesTheStoreAndLogsItAsync()
+    {
+        await _session.StartAsync("default_diner");
+        _engine.GroupArrived += Raise.Event<Action<GroupArrivedDto>>(new GroupArrivedDto(7, 3, 700));
+        _engine.GroupSeated += Raise.Event<Action<GroupSeatedDto>>(new GroupSeatedDto(7, 1, 701));
+
+        _engine.GroupDiningStageChanged += Raise.Event<Action<GroupDiningStageChangedDto>>(
+            new GroupDiningStageChangedDto(7, DiningStageNames.Eating, DiningVisitNames.Dessert, 720));
+
+        _store.Snapshot!.ActiveGroups.Should().ContainSingle().Which.Stage.Should().Be(DiningStageNames.Eating);
+        _session.Log.Last().Should().Contain("group 7").And.Contain("eating");
+    }
+
+    [Fact]
     public async Task GroupTurnedAway_UpdatesReputationInTheStoreAsync()
     {
         await _session.StartAsync("default_diner");

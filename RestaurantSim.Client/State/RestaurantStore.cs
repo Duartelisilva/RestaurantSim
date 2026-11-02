@@ -98,6 +98,25 @@ public sealed class RestaurantStore
         return true;
     }
 
+    // Server-computed stage, absolute — set, never toggled. Like GroupSeated, a group the
+    // client never saw seated is not invented here (its PartySize is unknown).
+    public bool Apply(GroupDiningStageChangedDto e)
+    {
+        if (!TryGetCurrent(e.Tick, out var s))
+            return false;
+
+        if (s.ActiveGroups.All(g => g.GroupId != e.GroupId))
+            return true;
+
+        Commit(s with
+        {
+            ActiveGroups = s.ActiveGroups
+                .Select(g => g.GroupId == e.GroupId ? g with { Stage = e.Stage, NextVisit = e.NextVisit } : g)
+                .ToList()
+        });
+        return true;
+    }
+
     public bool Apply(GroupLeftDto e)
     {
         if (!TryGetCurrent(e.Tick, out var s))

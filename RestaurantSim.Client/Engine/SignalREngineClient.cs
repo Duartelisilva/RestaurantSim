@@ -20,6 +20,7 @@ public sealed class SignalREngineClient : IEngineClient
         _connection.On<GroupTurnedAwayDto>(ClientEventNames.GroupTurnedAway, dto => GroupTurnedAway?.Invoke(dto));
         _connection.On<GroupAbandonedQueueDto>(ClientEventNames.GroupAbandonedQueue, dto => GroupAbandonedQueue?.Invoke(dto));
         _connection.On<GroupSeatedDto>(ClientEventNames.GroupSeated, dto => GroupSeated?.Invoke(dto));
+        _connection.On<GroupDiningStageChangedDto>(ClientEventNames.GroupDiningStageChanged, dto => GroupDiningStageChanged?.Invoke(dto));
         _connection.On<GroupLeftDto>(ClientEventNames.GroupLeft, dto => GroupLeft?.Invoke(dto));
         _connection.On<TableCleanedDto>(ClientEventNames.TableCleaned, dto => TableCleaned?.Invoke(dto));
         _connection.On<BillPaidDto>(ClientEventNames.BillPaid, dto => BillPaid?.Invoke(dto));
@@ -38,6 +39,7 @@ public sealed class SignalREngineClient : IEngineClient
     public event Action<GroupTurnedAwayDto>? GroupTurnedAway;
     public event Action<GroupAbandonedQueueDto>? GroupAbandonedQueue;
     public event Action<GroupSeatedDto>? GroupSeated;
+    public event Action<GroupDiningStageChangedDto>? GroupDiningStageChanged;
     public event Action<GroupLeftDto>? GroupLeft;
     public event Action<TableCleanedDto>? TableCleaned;
     public event Action<BillPaidDto>? BillPaid;

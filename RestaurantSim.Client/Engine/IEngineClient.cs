@@ -19,6 +19,7 @@ public interface IEngineClient : IAsyncDisposable
     event Action<GroupTurnedAwayDto>? GroupTurnedAway;
     event Action<GroupAbandonedQueueDto>? GroupAbandonedQueue;
     event Action<GroupSeatedDto>? GroupSeated;
+    event Action<GroupDiningStageChangedDto>? GroupDiningStageChanged;
     event Action<GroupLeftDto>? GroupLeft;
     event Action<TableCleanedDto>? TableCleaned;
     event Action<BillPaidDto>? BillPaid;

@@ -167,6 +167,74 @@ public class RestaurantStoreTests
         _store.Snapshot.ActiveGroups.Should().BeEmpty();
     }
 
+    // --- GroupDiningStageChanged ---
+
+    [Fact]
+    public void Apply_GroupSeated_StartsTheGroupAsOrderingDrinks()
+    {
+        _store.Load(BuildSnapshot(queue: [new QueuedGroupDto(7, 3)]));
+
+        _store.Apply(new GroupSeatedDto(7, 1, 10));
+
+        var group = _store.Snapshot!.ActiveGroups.Should().ContainSingle().Subject;
+        group.Stage.Should().Be(DiningStageNames.Ordering);
+        group.NextVisit.Should().Be(DiningVisitNames.Drinks);
+    }
+
+    [Fact]
+    public void Apply_GroupDiningStageChanged_SetsStageAndNextVisit()
+    {
+        _store.Load(BuildSnapshot(queue: [new QueuedGroupDto(7, 3)]));
+        _store.Apply(new GroupSeatedDto(7, 1, 10));
+
+        var applied = _store.Apply(
+            new GroupDiningStageChangedDto(7, DiningStageNames.WaitingForFood, DiningVisitNames.Main, 12));
+
+        applied.Should().BeTrue();
+        var group = _store.Snapshot!.ActiveGroups.Should().ContainSingle().Subject;
+        group.Stage.Should().Be(DiningStageNames.WaitingForFood);
+        group.NextVisit.Should().Be(DiningVisitNames.Main);
+    }
+
+    [Fact]
+    public void Apply_GroupDiningStageChanged_SameEventTwice_IsIdempotent()
+    {
+        _store.Load(BuildSnapshot(queue: [new QueuedGroupDto(7, 3)]));
+        _store.Apply(new GroupSeatedDto(7, 1, 10));
+        var stageChanged = new GroupDiningStageChangedDto(7, DiningStageNames.Eating, DiningVisitNames.Dessert, 12);
+
+        _store.Apply(stageChanged);
+        var afterFirst = _store.Snapshot;
+        _store.Apply(stageChanged);
+
+        _store.Snapshot.Should().BeEquivalentTo(afterFirst);
+        _store.Snapshot!.ActiveGroups.Should().ContainSingle().Which.Stage.Should().Be(DiningStageNames.Eating);
+    }
+
+    [Fact]
+    public void Apply_GroupDiningStageChanged_GroupUnknownToClient_ChangesNothing()
+    {
+        _store.Load(BuildSnapshot());
+        var before = _store.Snapshot;
+
+        var applied = _store.Apply(new GroupDiningStageChangedDto(99, DiningStageNames.Eating, DiningVisitNames.Dessert, 12));
+
+        applied.Should().BeTrue();
+        _store.Snapshot.Should().BeSameAs(before);
+    }
+
+    [Fact]
+    public void Apply_GroupDiningStageChanged_OlderThanSnapshot_IsIgnored()
+    {
+        _store.Load(BuildSnapshot(tick: 10, queue: [new QueuedGroupDto(7, 3)]));
+        _store.Apply(new GroupSeatedDto(7, 1, 10));
+
+        var applied = _store.Apply(new GroupDiningStageChangedDto(7, DiningStageNames.Eating, DiningVisitNames.Dessert, 9));
+
+        applied.Should().BeFalse();
+        _store.Snapshot!.ActiveGroups.Should().ContainSingle().Which.Stage.Should().Be(DiningStageNames.Ordering);
+    }
+
     // --- GroupLeft / TableCleaned ---
 
     [Fact]

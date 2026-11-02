@@ -48,6 +48,32 @@ public class FloorLabelsTests
         FloorLabels.Occupancy(snapshot, loose).Should().BeNull();
     }
 
+    [Fact]
+    public void DiningGroup_OccupiedCluster_ReturnsTheGroupForEveryTableOfTheCluster()
+    {
+        var snapshot = BuildSnapshot(occupiedBy: 7, active: [new ActiveGroupDto(7, 4, 1, "Seated", "Seated", DiningStageNames.Eating, DiningVisitNames.Dessert)]);
+
+        FloorLabels.DiningGroup(snapshot, snapshot.Floor.Tables[0]).Should().NotBeNull();
+        FloorLabels.DiningGroup(snapshot, snapshot.Floor.Tables[1])!.Stage.Should().Be(DiningStageNames.Eating);
+    }
+
+    [Fact]
+    public void DiningGroup_FreeCluster_IsNull()
+    {
+        var snapshot = BuildSnapshot(occupiedBy: null);
+
+        FloorLabels.DiningGroup(snapshot, snapshot.Floor.Tables[0]).Should().BeNull();
+    }
+
+    [Fact]
+    public void DiningGroup_GroupUnknownToClient_IsNull()
+    {
+        var snapshot = BuildSnapshot(occupiedBy: 7);
+
+        FloorLabels.DiningGroup(snapshot, snapshot.Floor.Tables[0]).Should().BeNull();
+    }
+
+
     // One merged cluster (id 1) of two tables (ids 1 and 2).
     private static RestaurantSnapshotDto BuildSnapshot(int? occupiedBy, IReadOnlyList<ActiveGroupDto>? active = null) => new(
         Guid.NewGuid(), 0, 1, 1, 0, 0m, 0f,
