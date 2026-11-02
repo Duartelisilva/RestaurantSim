@@ -7,6 +7,7 @@ using RestaurantSim.Application.Common;
 using RestaurantSim.Domain;
 using RestaurantSim.Domain.Abstractions;
 using RestaurantSim.Domain.CustomerService;
+using RestaurantSim.Domain.DomainEvents;
 using RestaurantSim.Domain.KitchenOps;
 using RestaurantSim.Domain.Scheduling;
 using RestaurantSim.Domain.Staff;
@@ -27,6 +28,7 @@ public sealed class AdvanceDiningCommandHandler : IRequestHandler<AdvanceDiningC
     private readonly IPresetRepository<RestaurantConfig> _presetRepository;
     private readonly IMenuRepository _menuRepository;
     private readonly IRandomProvider _random;
+    private readonly IPublisher _publisher;
     private readonly IRequestHandler<PlaceOrderCommand, Result> _placeOrder;
     private readonly IRequestHandler<DeliverOrderItemCommand, Result> _deliverOrderItem;
     private readonly IRequestHandler<PayBillCommand, Result> _payBill;
@@ -37,6 +39,7 @@ public sealed class AdvanceDiningCommandHandler : IRequestHandler<AdvanceDiningC
         IPresetRepository<RestaurantConfig> presetRepository,
         IMenuRepository menuRepository,
         IRandomProvider random,
+        IPublisher publisher,
         IRequestHandler<PlaceOrderCommand, Result> placeOrder,
         IRequestHandler<DeliverOrderItemCommand, Result> deliverOrderItem,
         IRequestHandler<PayBillCommand, Result> payBill,
@@ -46,6 +49,7 @@ public sealed class AdvanceDiningCommandHandler : IRequestHandler<AdvanceDiningC
         _presetRepository = presetRepository;
         _menuRepository = menuRepository;
         _random = random;
+        _publisher = publisher;
         _placeOrder = placeOrder;
         _deliverOrderItem = deliverOrderItem;
         _payBill = payBill;
@@ -68,11 +72,21 @@ public sealed class AdvanceDiningCommandHandler : IRequestHandler<AdvanceDiningC
         var menu = await _menuRepository.GetAllAsync(cancellationToken);
         var failures = new List<string>();
 
+        var stageChanges = new List<GroupDiningStageChanged>();
+
         // A copy: LeaveTable removes the group from ActiveGroups.
         foreach (var group in restaurant.CustomerService.ActiveGroups.ToList())
+        {
+            var stageBefore = StageOf(restaurant, group);
             await AdvanceGroupAsync(restaurant, config, menu, group, failures, cancellationToken);
+            TrackStageChange(restaurant, group, stageBefore, stageChanges);
+        }
 
         await _repository.SaveAsync(restaurant, cancellationToken);
+
+        // After the save, like every other event: whatever a listener sees is already stored.
+        foreach (var change in stageChanges)
+            await _publisher.Publish(change, cancellationToken);
 
         return failures.Count == 0 ? Result.Success() : Result.Failure(string.Join(" | ", failures));
     }
@@ -115,6 +129,32 @@ public sealed class AdvanceDiningCommandHandler : IRequestHandler<AdvanceDiningC
             // decision is made and resolved inside this same call.)
             await ResolveVisitAsync(restaurant, config, menu, group, order, failures, cancellationToken);
         }
+    }
+
+    // ---------- stage change detection ----------
+
+    // One event per group per tick at most, carrying the final stage of this pass — however
+    // many nested commands ran. A group that left (LeaveTable removed it) is GroupLeft's
+    // business, not ours.
+    private static void TrackStageChange(
+        Restaurant restaurant, CustomerGroup group, DiningStage stageBefore, List<GroupDiningStageChanged> changes)
+    {
+        if (!restaurant.CustomerService.ActiveGroups.Contains(group))
+            return;
+
+        var stageAfter = StageOf(restaurant, group);
+        if (stageAfter != stageBefore)
+            changes.Add(new GroupDiningStageChanged(
+                restaurant.RestaurantId, group.GroupId, stageAfter, group.NextVisit, restaurant.SimulationTick));
+    }
+
+    private static DiningStage StageOf(Restaurant restaurant, CustomerGroup group)
+    {
+        var order = group.CurrentOrderId is int orderId
+            ? restaurant.KitchenOps.ActiveOrders.FirstOrDefault(o => o.OrderId == orderId)
+            : null;
+
+        return DiningStageCalculator.Calculate(group, order);
     }
 
     // ---------- delivery ----------

@@ -27,6 +27,7 @@ public class AdvanceDiningCommandHandlerTests
     private readonly IPresetRepository<RestaurantConfig> _presetRepository = Substitute.For<IPresetRepository<RestaurantConfig>>();
     private readonly IMenuRepository _menuRepository = Substitute.For<IMenuRepository>();
     private readonly IRandomProvider _random = Substitute.For<IRandomProvider>();
+    private readonly IPublisher _publisher = Substitute.For<IPublisher>();
     private readonly IRequestHandler<PlaceOrderCommand, Result> _placeOrder = Substitute.For<IRequestHandler<PlaceOrderCommand, Result>>();
     private readonly IRequestHandler<DeliverOrderItemCommand, Result> _deliver = Substitute.For<IRequestHandler<DeliverOrderItemCommand, Result>>();
     private readonly IRequestHandler<PayBillCommand, Result> _payBill = Substitute.For<IRequestHandler<PayBillCommand, Result>>();
@@ -57,7 +58,7 @@ public class AdvanceDiningCommandHandlerTests
     public AdvanceDiningCommandHandlerTests()
     {
         _handler = new AdvanceDiningCommandHandler(
-            _repository, _presetRepository, _menuRepository, _random, _placeOrder, _deliver, _payBill, _leaveTable);
+            _repository, _presetRepository, _menuRepository, _random, _publisher, _placeOrder, _deliver, _payBill, _leaveTable);
 
         _menuRepository.GetAllAsync(Arg.Any<CancellationToken>()).Returns(new List<MenuItem> { Water, Steak, Tart });
         _random.NextDouble().Returns(0.0);
@@ -75,7 +76,7 @@ public class AdvanceDiningCommandHandlerTests
     {
         var (restaurant, group) = Scenario(DiningVisit.Drinks, GroupPhaseWaitState.AutoVisitPending, nextTick: Now + 1);
 
-        await Run(restaurant);
+        await RunAsync(restaurant);
 
         await _placeOrder.DidNotReceiveWithAnyArgs().Handle(default!, default);
         group.PhaseWaitState.Should().Be(GroupPhaseWaitState.AutoVisitPending);
@@ -86,7 +87,7 @@ public class AdvanceDiningCommandHandlerTests
     {
         var (restaurant, group) = Scenario(DiningVisit.Drinks, GroupPhaseWaitState.AutoVisitPending, nextTick: Now);
 
-        await Run(restaurant);
+        await RunAsync(restaurant);
 
         await _placeOrder.Received(1).Handle(
             Arg.Is<PlaceOrderCommand>(c =>
@@ -102,7 +103,7 @@ public class AdvanceDiningCommandHandlerTests
         _random.NextDouble().Returns(0.99); // above the 0.9 first-attempt chance
         var (restaurant, group) = Scenario(DiningVisit.Drinks, GroupPhaseWaitState.AutoVisitPending, nextTick: Now);
 
-        await Run(restaurant);
+        await RunAsync(restaurant);
 
         await _placeOrder.DidNotReceiveWithAnyArgs().Handle(default!, default);
         group.PhaseWaitState.Should().Be(GroupPhaseWaitState.RecheckScheduled);
@@ -116,7 +117,7 @@ public class AdvanceDiningCommandHandlerTests
         _random.NextDouble().Returns(0.93); // fails at 0.90, passes at 0.95 (second attempt)
         var (restaurant, group) = Scenario(DiningVisit.Drinks, GroupPhaseWaitState.RecheckScheduled, nextTick: Now, attempt: 1);
 
-        await Run(restaurant);
+        await RunAsync(restaurant);
 
         await _placeOrder.Received(1).Handle(Arg.Any<PlaceOrderCommand>(), Arg.Any<CancellationToken>());
         group.PhaseWaitState.Should().Be(GroupPhaseWaitState.Serving);
@@ -128,7 +129,7 @@ public class AdvanceDiningCommandHandlerTests
     {
         var (restaurant, group) = Scenario(DiningVisit.Drinks, GroupPhaseWaitState.AutoVisitPending, nextTick: Now, waiterState: StaffState.Busy);
 
-        await Run(restaurant);
+        await RunAsync(restaurant);
 
         await _placeOrder.DidNotReceiveWithAnyArgs().Handle(default!, default);
         group.NextAutoVisitTick.Should().Be(Now);
@@ -139,7 +140,7 @@ public class AdvanceDiningCommandHandlerTests
     {
         var (restaurant, group) = Scenario(DiningVisit.Main, GroupPhaseWaitState.AutoVisitPending, nextTick: Now, course: CoursePhase.Drinks);
 
-        await Run(restaurant);
+        await RunAsync(restaurant);
 
         await _placeOrder.Received(1).Handle(
             Arg.Is<PlaceOrderCommand>(c => c.Phase == ItemPhase.EntryMain && c.Items.Count == 2 && c.Items.All(i => i.MenuItemId == 5)),
@@ -153,7 +154,7 @@ public class AdvanceDiningCommandHandlerTests
         _placeOrder.Handle(Arg.Any<PlaceOrderCommand>(), Arg.Any<CancellationToken>()).Returns(Result.Failure("boom"));
         var (restaurant, group) = Scenario(DiningVisit.Drinks, GroupPhaseWaitState.AutoVisitPending, nextTick: Now);
 
-        var result = await Run(restaurant);
+        var result = await RunAsync(restaurant);
 
         result.IsFailure.Should().BeTrue();
         result.Error.Should().Contain("boom");
@@ -168,7 +169,7 @@ public class AdvanceDiningCommandHandlerTests
         var items = new[] { Item(1, 1, 1, ItemPhase.Drinks, OrderItemStatus.Served), Item(2, 2, 1, ItemPhase.Drinks, OrderItemStatus.Served) };
         var (restaurant, group) = Scenario(DiningVisit.Main, GroupPhaseWaitState.Serving, nextTick: 0, course: CoursePhase.Drinks, items: items);
 
-        await Run(restaurant);
+        await RunAsync(restaurant);
 
         group.PhaseWaitState.Should().Be(GroupPhaseWaitState.AutoVisitPending);
         group.NextAutoVisitTick.Should().Be(Now + 5);
@@ -180,7 +181,7 @@ public class AdvanceDiningCommandHandlerTests
         var items = new[] { Item(1, 1, 1, ItemPhase.Drinks, OrderItemStatus.Served), Item(2, 2, 1, ItemPhase.Drinks, OrderItemStatus.Queued) };
         var (restaurant, group) = Scenario(DiningVisit.Main, GroupPhaseWaitState.Serving, nextTick: 0, course: CoursePhase.Drinks, items: items);
 
-        await Run(restaurant);
+        await RunAsync(restaurant);
 
         group.PhaseWaitState.Should().Be(GroupPhaseWaitState.Serving);
     }
@@ -191,7 +192,7 @@ public class AdvanceDiningCommandHandlerTests
         var items = new[] { Item(1, 1, 1, ItemPhase.Drinks, OrderItemStatus.Served), Item(2, 2, 1, ItemPhase.Drinks, OrderItemStatus.Served) };
         var (restaurant, group) = Scenario(DiningVisit.Main, GroupPhaseWaitState.Serving, nextTick: 0, course: CoursePhase.Drinks, items: items, ticksPerRealSecond: 2);
 
-        await Run(restaurant);
+        await RunAsync(restaurant);
 
         group.NextAutoVisitTick.Should().Be(Now + 10); // 5 s x 2 ticks per second
     }
@@ -202,7 +203,7 @@ public class AdvanceDiningCommandHandlerTests
         var items = new[] { Item(1, 1, 5, ItemPhase.EntryMain, OrderItemStatus.Served), Item(2, 2, 5, ItemPhase.EntryMain, OrderItemStatus.Served) };
         var (restaurant, group) = Scenario(DiningVisit.Refill, GroupPhaseWaitState.Serving, nextTick: 0, course: CoursePhase.EntryMain, items: items);
 
-        await Run(restaurant);
+        await RunAsync(restaurant);
 
         group.PhaseWaitState.Should().Be(GroupPhaseWaitState.AutoVisitPending);
         group.NextAutoVisitTick.Should().Be(Now + 4);
@@ -214,11 +215,11 @@ public class AdvanceDiningCommandHandlerTests
         var eating = new[] { Item(1, 1, 5, ItemPhase.EntryMain, OrderItemStatus.Served, consumedBy: Now + 5), Item(2, 2, 5, ItemPhase.EntryMain, OrderItemStatus.Served, consumedBy: Now - 1) };
         var (restaurant, group) = Scenario(DiningVisit.Dessert, GroupPhaseWaitState.Serving, nextTick: 0, course: CoursePhase.EntryMain, items: eating);
 
-        await Run(restaurant);
+        await RunAsync(restaurant);
         group.PhaseWaitState.Should().Be(GroupPhaseWaitState.Serving);
 
         eating[0].ConsumedByTick = Now - 1;
-        await Run(restaurant);
+        await RunAsync(restaurant);
 
         group.PhaseWaitState.Should().Be(GroupPhaseWaitState.AutoVisitPending);
         group.NextAutoVisitTick.Should().Be(Now + 6);
@@ -230,7 +231,7 @@ public class AdvanceDiningCommandHandlerTests
         var items = new[] { Item(1, 1, 8, ItemPhase.Dessert, OrderItemStatus.Served, consumedBy: Now - 1) };
         var (restaurant, group) = Scenario(DiningVisit.Bill, GroupPhaseWaitState.Serving, nextTick: 0, course: CoursePhase.Dessert, items: items);
 
-        await Run(restaurant);
+        await RunAsync(restaurant);
 
         group.PhaseWaitState.Should().Be(GroupPhaseWaitState.AutoVisitPending);
         group.NextAutoVisitTick.Should().Be(Now + 4);
@@ -248,7 +249,7 @@ public class AdvanceDiningCommandHandlerTests
         };
         var (restaurant, group) = Scenario(DiningVisit.Refill, GroupPhaseWaitState.AutoVisitPending, nextTick: Now, course: CoursePhase.EntryMain, items: items);
 
-        await Run(restaurant);
+        await RunAsync(restaurant);
 
         await _placeOrder.Received(1).Handle(
             Arg.Is<PlaceOrderCommand>(c => c.Phase == ItemPhase.Drinks && c.Items.Count == 1 && c.Items[0].CustomerId == 1),
@@ -264,7 +265,7 @@ public class AdvanceDiningCommandHandlerTests
         var items = new[] { Item(1, 1, 1, ItemPhase.Drinks, OrderItemStatus.Served, consumedBy: Now - 1) };
         var (restaurant, group) = Scenario(DiningVisit.Refill, GroupPhaseWaitState.AutoVisitPending, nextTick: Now, course: CoursePhase.EntryMain, items: items);
 
-        await Run(restaurant);
+        await RunAsync(restaurant);
 
         await _placeOrder.DidNotReceiveWithAnyArgs().Handle(default!, default);
         group.NextVisit.Should().Be(DiningVisit.Dessert);
@@ -278,7 +279,7 @@ public class AdvanceDiningCommandHandlerTests
         _random.NextDouble().Returns(0.0, 0.9, 0.9); // ready; then both members decline
         var (restaurant, group) = Scenario(DiningVisit.Dessert, GroupPhaseWaitState.AutoVisitPending, nextTick: Now, course: CoursePhase.EntryMain);
 
-        await Run(restaurant);
+        await RunAsync(restaurant);
 
         await _placeOrder.DidNotReceiveWithAnyArgs().Handle(default!, default);
         group.NextVisit.Should().Be(DiningVisit.Bill);
@@ -291,7 +292,7 @@ public class AdvanceDiningCommandHandlerTests
     {
         var (restaurant, group) = Scenario(DiningVisit.Dessert, GroupPhaseWaitState.AutoVisitPending, nextTick: Now, course: CoursePhase.EntryMain);
 
-        await Run(restaurant);
+        await RunAsync(restaurant);
 
         await _placeOrder.Received(1).Handle(
             Arg.Is<PlaceOrderCommand>(c => c.Phase == ItemPhase.Dessert && c.Items.Count == 2 && c.Items.All(i => i.MenuItemId == 8)),
@@ -307,7 +308,7 @@ public class AdvanceDiningCommandHandlerTests
     {
         var (restaurant, group) = Scenario(DiningVisit.Bill, GroupPhaseWaitState.AutoVisitPending, nextTick: Now, course: CoursePhase.Dessert);
 
-        await Run(restaurant);
+        await RunAsync(restaurant);
 
         await _payBill.Received(1).Handle(Arg.Is<PayBillCommand>(c => c.GroupId == group.GroupId), Arg.Any<CancellationToken>());
         group.NextAutoVisitTick.Should().Be(Now + 2);
@@ -319,7 +320,7 @@ public class AdvanceDiningCommandHandlerTests
         _payBill.Handle(Arg.Any<PayBillCommand>(), Arg.Any<CancellationToken>()).Returns(Result.Failure("not eligible"));
         var (restaurant, group) = Scenario(DiningVisit.Bill, GroupPhaseWaitState.AutoVisitPending, nextTick: Now, course: CoursePhase.Dessert);
 
-        var result = await Run(restaurant);
+        var result = await RunAsync(restaurant);
 
         result.IsFailure.Should().BeTrue();
         group.NextAutoVisitTick.Should().Be(Now + 1);
@@ -331,11 +332,11 @@ public class AdvanceDiningCommandHandlerTests
         var (restaurant, group) = Scenario(DiningVisit.Bill, GroupPhaseWaitState.Serving, nextTick: Now + 1, course: CoursePhase.Done);
         group.LifecycleState = GroupLifecycleState.Leaving;
 
-        await Run(restaurant);
+        await RunAsync(restaurant);
         await _leaveTable.DidNotReceiveWithAnyArgs().Handle(default!, default);
 
         group.NextAutoVisitTick = Now;
-        await Run(restaurant);
+        await RunAsync(restaurant);
         await _leaveTable.Received(1).Handle(Arg.Is<LeaveTableCommand>(c => c.GroupId == group.GroupId), Arg.Any<CancellationToken>());
     }
 
@@ -347,7 +348,7 @@ public class AdvanceDiningCommandHandlerTests
         var steak = Item(1, 1, 5, ItemPhase.EntryMain, OrderItemStatus.Ready);
         var (restaurant, _) = Scenario(DiningVisit.Refill, GroupPhaseWaitState.Serving, nextTick: 0, course: CoursePhase.EntryMain, items: new[] { steak });
 
-        await Run(restaurant);
+        await RunAsync(restaurant);
 
         await _deliver.Received(1).Handle(Arg.Is<DeliverOrderItemCommand>(c => c.OrderItemId == 1), Arg.Any<CancellationToken>());
         steak.ConsumedByTick.Should().Be(Now + 18); // roll 0.0 -> the 18 s minimum for a main
@@ -360,7 +361,7 @@ public class AdvanceDiningCommandHandlerTests
         var steak = Item(2, 2, 5, ItemPhase.EntryMain, OrderItemStatus.Queued);
         var (restaurant, _) = Scenario(DiningVisit.Refill, GroupPhaseWaitState.Serving, nextTick: 0, course: CoursePhase.EntryMain, items: new[] { water, steak });
 
-        await Run(restaurant);
+        await RunAsync(restaurant);
 
         await _deliver.Received(1).Handle(Arg.Is<DeliverOrderItemCommand>(c => c.OrderItemId == 1), Arg.Any<CancellationToken>());
         await _deliver.DidNotReceive().Handle(Arg.Is<DeliverOrderItemCommand>(c => c.OrderItemId == 2), Arg.Any<CancellationToken>());
@@ -373,7 +374,7 @@ public class AdvanceDiningCommandHandlerTests
         var steak = Item(1, 1, 5, ItemPhase.EntryMain, OrderItemStatus.Ready);
         var (restaurant, _) = Scenario(DiningVisit.Refill, GroupPhaseWaitState.Serving, nextTick: 0, course: CoursePhase.EntryMain, items: new[] { steak });
 
-        var result = await Run(restaurant);
+        var result = await RunAsync(restaurant);
 
         result.IsSuccess.Should().BeTrue();
         steak.ConsumedByTick.Should().BeNull();
@@ -385,7 +386,7 @@ public class AdvanceDiningCommandHandlerTests
         var (restaurant, group) = Scenario(DiningVisit.Drinks, GroupPhaseWaitState.AutoVisitPending, nextTick: Now);
         restaurant.CustomerService.ActiveGroups.Remove(group);
 
-        var result = await Run(restaurant);
+        var result = await RunAsync(restaurant);
 
         result.IsSuccess.Should().BeTrue();
         await _menuRepository.DidNotReceive().GetAllAsync(Arg.Any<CancellationToken>());
@@ -393,7 +394,7 @@ public class AdvanceDiningCommandHandlerTests
 
     // ---------- helpers ----------
 
-    private async Task<Result> Run(Restaurant restaurant)
+    private async Task<Result> RunAsync(Restaurant restaurant)
     {
         _repository.GetAsync(restaurant.RestaurantId, Arg.Any<CancellationToken>()).Returns(restaurant);
         return await _handler.Handle(new AdvanceDiningCommand(restaurant.RestaurantId), CancellationToken.None);
