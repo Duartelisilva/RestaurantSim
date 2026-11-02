@@ -77,7 +77,7 @@ public sealed class AdvanceDiningCommandHandler : IRequestHandler<AdvanceDiningC
         // A copy: LeaveTable removes the group from ActiveGroups.
         foreach (var group in restaurant.CustomerService.ActiveGroups.ToList())
         {
-            var stageBefore = StageOf(restaurant, group);
+            var stageBefore = DiningStageCalculator.Calculate(restaurant, group);
             await AdvanceGroupAsync(restaurant, config, menu, group, failures, cancellationToken);
             TrackStageChange(restaurant, group, stageBefore, stageChanges);
         }
@@ -142,19 +142,10 @@ public sealed class AdvanceDiningCommandHandler : IRequestHandler<AdvanceDiningC
         if (!restaurant.CustomerService.ActiveGroups.Contains(group))
             return;
 
-        var stageAfter = StageOf(restaurant, group);
+        var stageAfter = DiningStageCalculator.Calculate(restaurant, group);
         if (stageAfter != stageBefore)
             changes.Add(new GroupDiningStageChanged(
                 restaurant.RestaurantId, group.GroupId, stageAfter, group.NextVisit, restaurant.SimulationTick));
-    }
-
-    private static DiningStage StageOf(Restaurant restaurant, CustomerGroup group)
-    {
-        var order = group.CurrentOrderId is int orderId
-            ? restaurant.KitchenOps.ActiveOrders.FirstOrDefault(o => o.OrderId == orderId)
-            : null;
-
-        return DiningStageCalculator.Calculate(group, order);
     }
 
     // ---------- delivery ----------

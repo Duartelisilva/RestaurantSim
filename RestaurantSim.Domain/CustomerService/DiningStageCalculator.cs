@@ -11,6 +11,16 @@ namespace RestaurantSim.Domain.CustomerService;
 // NextVisit is already set to Bill while the dessert is still being cooked and eaten.
 public static class DiningStageCalculator
 {
+    // Looks the group's current order up on the restaurant — the one place that knows how.
+    public static DiningStage Calculate(Restaurant restaurant, CustomerGroup group)
+    {
+        var order = group.CurrentOrderId is int orderId
+            ? restaurant.KitchenOps.ActiveOrders.FirstOrDefault(o => o.OrderId == orderId)
+            : null;
+
+        return Calculate(group, order);
+    }
+
     public static DiningStage Calculate(CustomerGroup group, Order? order)
     {
         if (group.LifecycleState == GroupLifecycleState.Leaving)

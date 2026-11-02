@@ -17,7 +17,7 @@ public class FloorLabelsTests
     [Fact]
     public void Occupancy_KnownGroup_ShowsIdAndPartySize()
     {
-        var snapshot = BuildSnapshot(occupiedBy: 7, active: [new ActiveGroupDto(7, 3, 1, "Seated", "Seated")]);
+        var snapshot = BuildSnapshot(occupiedBy: 7, active: [new ActiveGroupDto(7, 3, 1, "Seated", "Seated", DiningStageNames.Ordering, DiningVisitNames.Drinks)]);
 
         FloorLabels.Occupancy(snapshot, snapshot.Floor.Tables[0]).Should().Be("G7 ×3");
     }
@@ -33,7 +33,7 @@ public class FloorLabelsTests
     [Fact]
     public void Occupancy_MergedCluster_LabelsOnlyTheLowestNumberedTable()
     {
-        var snapshot = BuildSnapshot(occupiedBy: 7, active: [new ActiveGroupDto(7, 4, 1, "Seated", "Seated")]);
+        var snapshot = BuildSnapshot(occupiedBy: 7, active: [new ActiveGroupDto(7, 4, 1, "Seated", "Seated", DiningStageNames.Ordering, DiningVisitNames.Drinks)]);
 
         FloorLabels.Occupancy(snapshot, snapshot.Floor.Tables[0]).Should().Be("G7 ×4");
         FloorLabels.Occupancy(snapshot, snapshot.Floor.Tables[1]).Should().BeNull();

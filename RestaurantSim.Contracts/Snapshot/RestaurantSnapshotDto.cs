@@ -59,7 +59,9 @@ public sealed record ActiveGroupDto(
     int PartySize,
     int? ClusterId,
     string LifecycleState,
-    string CoursePhase);
+    string CoursePhase,
+    string Stage,
+    string NextVisit);
 
 // MinutesPerTick (derived on the server from GameMinutesPerRealSecond and
 // TicksPerRealSecond, so it can be fractional) / TicksPerRealSecond let the

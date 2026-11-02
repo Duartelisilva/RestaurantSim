@@ -85,7 +85,9 @@ public sealed class RestaurantStore
         var queue = s.Queue.Where(g => g.GroupId != e.GroupId).ToList();
         var active = s.ActiveGroups.ToList();
         if (queued is not null && active.All(g => g.GroupId != e.GroupId))
-            active.Add(new ActiveGroupDto(e.GroupId, queued.PartySize, e.ClusterId, "Seated", "Seated"));
+            active.Add(new ActiveGroupDto(
+                e.GroupId, queued.PartySize, e.ClusterId, "Seated", "Seated",
+                DiningStageNames.Ordering, DiningVisitNames.Drinks));
 
         Commit(s with
         {

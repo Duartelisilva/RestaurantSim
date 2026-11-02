@@ -1,10 +1,12 @@
 using FluentAssertions;
 using NSubstitute;
 using RestaurantSim.Application.Queries.GetRestaurantSnapshot;
+using RestaurantSim.Contracts.Snapshot;
 using RestaurantSim.Domain;
 using RestaurantSim.Domain.Abstractions;
 using RestaurantSim.Domain.CustomerService;
 using RestaurantSim.Domain.Floor;
+using RestaurantSim.Domain.KitchenOps;
 using RestaurantSim.Domain.Scheduling;
 using Xunit;
 
@@ -90,6 +92,43 @@ public class GetRestaurantSnapshotQueryHandlerTests
         var queued = result.Value!.Queue.Should().ContainSingle().Subject;
         queued.GroupId.Should().Be(5);
         queued.PartySize.Should().Be(3);
+    }
+
+    [Fact]
+    public async Task Handle_MapsTheDiningStageOfActiveGroupsAsync()
+    {
+        var restaurant = BuildRestaurant();
+        restaurant.CustomerService.ActiveGroups.Add(new CustomerGroup
+        {
+            GroupId = 7,
+            PartySize = 2,
+            Members = Array.Empty<Customer>(),
+            ArrivalTick = 0,
+            LifecycleState = GroupLifecycleState.Seated,
+            PhaseWaitState = GroupPhaseWaitState.Serving,
+            NextVisit = DiningVisit.Main,
+            CurrentOrderId = 1
+        });
+        restaurant.KitchenOps.ActiveOrders.Add(new Order
+        {
+            OrderId = 1,
+            GroupId = 7,
+            ClusterId = 1,
+            CreatedAtTick = 0,
+            Items = new List<OrderItem>
+            {
+                new() { OrderItemId = 1, OwnerId = 1, MenuItemId = 1, Phase = ItemPhase.Drinks, PriceAtOrder = 1m,
+                        Status = OrderItemStatus.Cooking, CreatedAtTick = 0 }
+            }
+        });
+        _repository.GetAsync(restaurant.RestaurantId, Arg.Any<CancellationToken>()).Returns(restaurant);
+        _presetRepository.GetAsync(restaurant.ConfigId, Arg.Any<CancellationToken>()).Returns(BuildConfig());
+
+        var result = await _handler.Handle(new GetRestaurantSnapshotQuery(restaurant.RestaurantId), CancellationToken.None);
+
+        var active = result.Value!.ActiveGroups.Should().ContainSingle().Subject;
+        active.Stage.Should().Be(DiningStageNames.WaitingForFood);
+        active.NextVisit.Should().Be(DiningVisitNames.Main);
     }
 
     private static Restaurant BuildRestaurant()

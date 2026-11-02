@@ -1,5 +1,6 @@
 using RestaurantSim.Contracts.Snapshot;
 using RestaurantSim.Domain;
+using RestaurantSim.Domain.CustomerService;
 using RestaurantSim.Domain.Floor;
 
 namespace RestaurantSim.Application.Queries.GetRestaurantSnapshot;
@@ -42,7 +43,8 @@ internal static class RestaurantSnapshotMapper
             service.Queue.Select(g => new QueuedGroupDto(g.GroupId, g.PartySize)).ToList(),
             service.ActiveGroups.Select(g => new ActiveGroupDto(
                 g.GroupId, g.PartySize, g.ClusterId,
-                g.LifecycleState.ToString(), g.CoursePhase.ToString())).ToList());
+                g.LifecycleState.ToString(), g.CoursePhase.ToString(),
+                DiningStageCalculator.Calculate(r, g).ToString(), g.NextVisit.ToString())).ToList());
     }
 
     private static GridPointDto Point(GridPosition p) => new(p.X, p.Y);
