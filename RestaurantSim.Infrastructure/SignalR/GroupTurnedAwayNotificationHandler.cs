@@ -18,7 +18,7 @@ public sealed class GroupTurnedAwayNotificationHandler : INotificationHandler<Gr
 
     public Task Handle(GroupTurnedAway notification, CancellationToken cancellationToken)
     {
-        var dto = new GroupTurnedAwayDto(notification.ReputationAfter, notification.Tick);
+        var dto = new GroupTurnedAwayDto(notification.ReputationAfter, notification.Tick, notification.Reason.ToString());
 
         return _hubContext.Clients
             .Group(notification.RestaurantId.ToString())

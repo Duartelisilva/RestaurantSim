@@ -26,7 +26,7 @@ public sealed class RestaurantEventHandlersTests
 
         await handler.Handle(new GroupArrived(_restaurantId, 4, 3, 50), CancellationToken.None);
 
-        await AssertSent(ClientEventNames.GroupArrived, new GroupArrivedDto(4, 3, 50));
+        await AssertSentAsync(ClientEventNames.GroupArrived, new GroupArrivedDto(4, 3, 50));
     }
 
     [Fact]
@@ -36,7 +36,7 @@ public sealed class RestaurantEventHandlersTests
 
         await handler.Handle(new GroupAbandonedQueue(_restaurantId, 4, 19.5f, 60), CancellationToken.None);
 
-        await AssertSent(ClientEventNames.GroupAbandonedQueue, new GroupAbandonedQueueDto(4, 19.5f, 60));
+        await AssertSentAsync(ClientEventNames.GroupAbandonedQueue, new GroupAbandonedQueueDto(4, 19.5f, 60));
     }
 
     [Fact]
@@ -46,7 +46,7 @@ public sealed class RestaurantEventHandlersTests
 
         await handler.Handle(new GroupTurnedAway(_restaurantId, 19.8f, 55), CancellationToken.None);
 
-        await AssertSent(ClientEventNames.GroupTurnedAway, new GroupTurnedAwayDto(19.8f, 55));
+        await AssertSentAsync(ClientEventNames.GroupTurnedAway, new GroupTurnedAwayDto(19.8f, 55, TurnedAwayReasonNames.QueueFull));
     }
 
     [Fact]
@@ -56,7 +56,7 @@ public sealed class RestaurantEventHandlersTests
 
         await handler.Handle(new BillPaid(_restaurantId, 4, 9, 12.50m, 3.10m, 5012.50m, 220), CancellationToken.None);
 
-        await AssertSent(ClientEventNames.BillPaid, new BillPaidDto(4, 12.50m, 3.10m, 5012.50m, 220));
+        await AssertSentAsync(ClientEventNames.BillPaid, new BillPaidDto(4, 12.50m, 3.10m, 5012.50m, 220));
     }
 
     [Fact]
@@ -66,7 +66,7 @@ public sealed class RestaurantEventHandlersTests
 
         await handler.Handle(new GroupLeft(_restaurantId, 4, 2, 3, 72f, 200), CancellationToken.None);
 
-        await AssertSent(ClientEventNames.GroupLeft, new GroupLeftDto(4, 2, 200));
+        await AssertSentAsync(ClientEventNames.GroupLeft, new GroupLeftDto(4, 2, 200));
     }
 
     [Fact]
@@ -76,10 +76,10 @@ public sealed class RestaurantEventHandlersTests
 
         await handler.Handle(new TableCleaned(_restaurantId, 5, 210), CancellationToken.None);
 
-        await AssertSent(ClientEventNames.TableCleaned, new TableCleanedDto(5, 210));
+        await AssertSentAsync(ClientEventNames.TableCleaned, new TableCleanedDto(5, 210));
     }
 
-    private async Task AssertSent(string method, object expected)
+    private async Task AssertSentAsync(string method, object expected)
     {
         await _proxy.Received(1).SendCoreAsync(
             method,

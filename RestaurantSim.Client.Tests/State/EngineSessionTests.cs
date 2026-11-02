@@ -105,7 +105,7 @@ public class EngineSessionTests
     {
         await _session.StartAsync("default_diner");
 
-        _engine.GroupTurnedAway += Raise.Event<Action<GroupTurnedAwayDto>>(new GroupTurnedAwayDto(19.8f, 700));
+        _engine.GroupTurnedAway += Raise.Event<Action<GroupTurnedAwayDto>>(new GroupTurnedAwayDto(19.8f, 700, TurnedAwayReasonNames.QueueFull));
 
         _store.Snapshot!.Reputation.Should().Be(19.8f);
     }

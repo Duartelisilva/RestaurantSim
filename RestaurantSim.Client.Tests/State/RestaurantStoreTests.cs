@@ -105,7 +105,7 @@ public class RestaurantStoreTests
     {
         _store.Load(BuildSnapshot());
 
-        _store.Apply(new GroupTurnedAwayDto(19.8f, 11)).Should().BeTrue();
+        _store.Apply(new GroupTurnedAwayDto(19.8f, 11, TurnedAwayReasonNames.QueueFull)).Should().BeTrue();
 
         _store.Snapshot!.Reputation.Should().Be(19.8f);
     }

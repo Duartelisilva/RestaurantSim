@@ -10,6 +10,8 @@ public static class ClientEventNames
     public const string GroupAbandonedQueue = "GroupAbandonedQueue";
     public const string GroupSeated = "GroupSeated";
     public const string GroupDiningStageChanged = "GroupDiningStageChanged";
+    public const string ClustersMerged = "ClustersMerged";
+    public const string ClusterSplit = "ClusterSplit";
     public const string GroupLeft = "GroupLeft";
     public const string TableCleaned = "TableCleaned";
     public const string BillPaid = "BillPaid";
