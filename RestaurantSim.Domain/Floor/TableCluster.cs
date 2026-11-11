@@ -7,7 +7,8 @@ public enum TableClusterState
     Free,
     Reserved,
     Occupied,
-    NeedsCleaning
+    NeedsCleaning,
+    Moving // A member table is sliding into (or back from) a merge — not seatable, not mergeable.
 }
 
 // What a runtime merge combined — enough to put the clusters back exactly as they were
@@ -46,13 +47,16 @@ public sealed class TableCluster
 
     public bool IsMergedOnDemand => MergedFrom is not null;
 
-    // Derived per entity doc §5's priority order: NeedsCleaning > Occupied > Reserved > Free.
+    // Derived per entity doc §5's priority order: Moving > NeedsCleaning > Occupied > Reserved > Free.
     public TableClusterState DeriveState(
         IReadOnlyList<Table> allTables,
         IReadOnlyList<Reservation> reservations,
         long currentTick)
     {
-        var memberTables = allTables.Where(t => TableIds.Contains(t.TableId));
+        var memberTables = allTables.Where(t => TableIds.Contains(t.TableId)).ToList();
+        if (memberTables.Any(t => t.IsMoving))
+            return TableClusterState.Moving;
+
         if (memberTables.Any(t => !t.IsClean))
             return TableClusterState.NeedsCleaning;
 

@@ -82,6 +82,12 @@ public sealed class RestaurantConfig
     public required int MaxQueueLength { get; init; }
     public required float BaseArrivalIntervalSeconds { get; init; }
 
+    // Table movement (mechanics doc §18, draft). Nullable with code-level fallbacks, like the
+    // fields above: no gap = tables must already touch; seconds per cell falls back to
+    // TableMoveTiming.DefaultSecondsPerCell. Both are pending playtesting.
+    public int? MaxMergeGapCells { get; init; }
+    public float? TableMoveSecondsPerCell { get; init; }
+
     // New — not in entity doc §22. Business logic §1.2 references this threshold
     // qualitatively but never named it as a field. Nullable with a code-level
     // default fallback (15f, tied to the Mood tier table) if unset — same
