@@ -29,6 +29,13 @@ public sealed class FloorState
     // New — Freezer (entity doc §18a) was never actually added here; entity
     // doc §19's field listing omits it. Real gap, not previously noticed.
     public List<Freezer> Freezers { get; init; } = new();
+
+    // How far apart (empty cells) two tables may be and still be pushed together
+    // (mechanics doc §18, draft). Copied from RestaurantConfig.MaxMergeGapCells when the
+    // restaurant is created, so everything that only has the aggregate at hand — the merge
+    // rules, the AutoManager's layout strategy, the oversize check — applies the same limit.
+    // 0 = tables must already touch.
+    public int MaxMergeGapCells { get; init; }
 }
 
 public sealed class StaffRosterState

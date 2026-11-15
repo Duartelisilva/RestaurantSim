@@ -31,6 +31,22 @@ public sealed class Table : IPlaceable
     public long? MoveEndTick { get; set; }
     public bool IsMoving => MoveEndTick is not null;
 
+    // Starts sliding to `to`. The logical position flips NOW — merge rules, anchors and blocked
+    // cells all see the final layout — while MoveFrom/MoveEndTick mark the slide for clients and
+    // keep the cluster Moving until the table arrives.
+    public void StartMove(GridPosition to, long endTick)
+    {
+        MoveFrom = Position;
+        Position = to;
+        MoveEndTick = endTick;
+    }
+
+    public void CompleteMove()
+    {
+        MoveFrom = null;
+        MoveEndTick = null;
+    }
+
     private GridPosition _position;
     private GridPosition? _homePosition;
     public required GridBounds Hitbox { get; init; }

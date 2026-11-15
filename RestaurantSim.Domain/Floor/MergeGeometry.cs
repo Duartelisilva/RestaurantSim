@@ -8,6 +8,9 @@ public sealed record MergeGeometry(int MaxGapCells, IReadOnlySet<GridPosition> B
     // Tables must already touch — the behaviour before tables could be moved.
     public static MergeGeometry TouchingOnly { get; } = new(0, new HashSet<GridPosition>());
 
+    // The floor's own limit (FloorState.MaxMergeGapCells) and its current cells.
+    public static MergeGeometry For(FloorState floor) => For(floor, floor.MaxMergeGapCells);
+
     // Every cell of every placeable on the floor, tables included.
     public static MergeGeometry For(FloorState floor, int maxGapCells) =>
         new(maxGapCells, BlockedCellsOf(floor, excludedTableIds: Array.Empty<int>()));

@@ -3,6 +3,7 @@ using FluentAssertions;
 using MediatR;
 using NSubstitute;
 using RestaurantSim.Application.Commands.MergeClusters;
+using RestaurantSim.Application.Tests.Support;
 using RestaurantSim.Domain;
 using RestaurantSim.Domain.Abstractions;
 using RestaurantSim.Domain.DomainEvents;
@@ -15,12 +16,14 @@ namespace RestaurantSim.Application.Tests.Commands.MergeClusters;
 public class MergeClustersCommandHandlerTests
 {
     private readonly IRestaurantRepository _repository = Substitute.For<IRestaurantRepository>();
+    private readonly IPresetRepository<RestaurantConfig> _presetRepository = Substitute.For<IPresetRepository<RestaurantConfig>>();
     private readonly IPublisher _publisher = Substitute.For<IPublisher>();
     private readonly MergeClustersCommandHandler _handler;
 
     public MergeClustersCommandHandlerTests()
     {
-        _handler = new MergeClustersCommandHandler(_repository, _publisher);
+        _presetRepository.GetAsync(Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns(TestRestaurantConfig.Build());
+        _handler = new MergeClustersCommandHandler(_repository, _presetRepository, _publisher);
     }
 
     [Fact]
@@ -48,17 +51,20 @@ public class MergeClustersCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_TheMergedClusterGoesToTheLeastLoadedWaiterAsync()
+    public async Task Handle_TheMergedClusterGoesToTheLeastLoadedWaiterOfItsOwnClustersAsync()
     {
         var restaurant = BuildRestaurant(tableCount: 3);
         restaurant.StaffRoster.Staff.Add(Waiter(1));
         restaurant.StaffRoster.Staff.Add(Waiter(2));
+        restaurant.StaffRoster.Staff.Add(Waiter(3));
 
-        // Waiter 1 is busy with an occupied cluster 3; waiter 2 has nobody.
+        // Waiter 1 is busy with an occupied cluster 3; waiter 2 has nobody. Waiter 3 has
+        // nobody either, but neither merged cluster is in his area, so he is not considered.
         var busy = restaurant.Floor.Clusters.Single(c => c.ClusterId == 3);
         busy.OccupiedBy = 99;
         busy.AssignedWaiterId = 1;
         restaurant.Floor.Clusters.Single(c => c.ClusterId == 1).AssignedWaiterId = 1;
+        restaurant.Floor.Clusters.Single(c => c.ClusterId == 2).AssignedWaiterId = 2;
 
         await RunAsync(restaurant, 1, 2);
 

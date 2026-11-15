@@ -1,4 +1,4 @@
-﻿using FluentAssertions;
+using FluentAssertions;
 using NSubstitute;
 using RestaurantSim.Application.Commands.CreateRestaurant;
 using RestaurantSim.Domain;
@@ -116,6 +116,22 @@ public class CreateRestaurantCommandHandlerTests
         result.IsFailure.Should().BeTrue();
     }
 
+    [Theory]
+    [InlineData(null, 0)]
+    [InlineData(1, 1)]
+    public async Task Handle_CopiesTheMergeGapLimitOntoTheFloorAsync(int? configured, int expected)
+    {
+        _presetRepository.GetAsync("default_diner", Arg.Any<CancellationToken>()).Returns(BuildConfig(configured));
+        _layoutRepository.GetByIdAsync("default_diner_layout", Arg.Any<CancellationToken>()).Returns(BuildLayout());
+
+        Restaurant? savedRestaurant = null;
+        await _repository.SaveAsync(Arg.Do<Restaurant>(r => savedRestaurant = r), Arg.Any<CancellationToken>());
+
+        await _handler.Handle(new CreateRestaurantCommand("default_diner"), CancellationToken.None);
+
+        savedRestaurant!.Floor.MaxMergeGapCells.Should().Be(expected);
+    }
+
     [Fact]
     public async Task Handle_ReturnsFailure_WhenLayoutDoesNotExistAsync()
     {
@@ -127,8 +143,9 @@ public class CreateRestaurantCommandHandlerTests
         result.IsFailure.Should().BeTrue();
     }
 
-    private static RestaurantConfig BuildConfig() => new()
+    private static RestaurantConfig BuildConfig(int? maxMergeGapCells = null) => new()
     {
+        MaxMergeGapCells = maxMergeGapCells,
         ConfigId = "default_diner",
         StartingCash = 5000m,
         GameMinutesPerRealSecond = 1,

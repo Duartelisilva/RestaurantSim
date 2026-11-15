@@ -2,6 +2,7 @@ using MediatR;
 using RestaurantSim.Application.Common;
 using RestaurantSim.Domain;
 using RestaurantSim.Domain.Abstractions;
+using RestaurantSim.Domain.Floor;
 using RestaurantSim.Domain.Scheduling;
 using RestaurantSim.Domain.Staff;
 using RestaurantSim.Domain.Statistics;
@@ -51,7 +52,8 @@ public sealed class CreateRestaurantCommandHandler : IRequestHandler<CreateResta
                 KitchenStations = layout.KitchenStations.ToList(),
                 HeatLamps = layout.HeatLamps.ToList(),
                 Freezers = layout.Freezers.ToList(),
-                Bathrooms = layout.Bathrooms.ToList()
+                Bathrooms = layout.Bathrooms.ToList(),
+                MaxMergeGapCells = TableMoveTiming.MaxMergeGapCells(config)
             },
             StaffRoster = new StaffRosterState { Staff = SeedStaff(config) },
             CustomerService = new CustomerServiceState(),

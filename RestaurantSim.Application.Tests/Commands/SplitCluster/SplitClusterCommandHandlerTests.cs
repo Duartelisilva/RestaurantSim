@@ -4,6 +4,7 @@ using MediatR;
 using NSubstitute;
 using RestaurantSim.Application.Commands.MergeClusters;
 using RestaurantSim.Application.Commands.SplitCluster;
+using RestaurantSim.Application.Tests.Support;
 using RestaurantSim.Domain;
 using RestaurantSim.Domain.Abstractions;
 using RestaurantSim.Domain.DomainEvents;
@@ -15,14 +16,16 @@ namespace RestaurantSim.Application.Tests.Commands.SplitCluster;
 public class SplitClusterCommandHandlerTests
 {
     private readonly IRestaurantRepository _repository = Substitute.For<IRestaurantRepository>();
+    private readonly IPresetRepository<RestaurantConfig> _presetRepository = Substitute.For<IPresetRepository<RestaurantConfig>>();
     private readonly IPublisher _publisher = Substitute.For<IPublisher>();
     private readonly SplitClusterCommandHandler _splitHandler;
     private readonly MergeClustersCommandHandler _mergeHandler;
 
     public SplitClusterCommandHandlerTests()
     {
-        _splitHandler = new SplitClusterCommandHandler(_repository, _publisher);
-        _mergeHandler = new MergeClustersCommandHandler(_repository, _publisher);
+        _presetRepository.GetAsync(Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns(TestRestaurantConfig.Build());
+        _splitHandler = new SplitClusterCommandHandler(_repository, _presetRepository, _publisher);
+        _mergeHandler = new MergeClustersCommandHandler(_repository, _presetRepository, _publisher);
     }
 
     [Fact]

@@ -72,7 +72,7 @@ public sealed class SpawnArrivalCommandHandler : IRequestHandler<SpawnArrivalCom
         // turned away at the door instead of clogging the queue. The reputation penalty is a
         // config fraction of current reputation, 0 by default. A layout with no tables at all
         // is degenerate and has no limit to apply.
-        var maxPartySize = TableMergeRules.MaxPartySize(restaurant.Floor.Tables);
+        var maxPartySize = TableMergeRules.MaxPartySize(restaurant.Floor.Tables, MergeGeometry.For(restaurant.Floor));
         if (maxPartySize > 0 && group.PartySize > maxPartySize)
         {
             restaurant.Reputation = MathF.Max(0, restaurant.Reputation - restaurant.Reputation * config.OversizedPartyReputationPenalty);

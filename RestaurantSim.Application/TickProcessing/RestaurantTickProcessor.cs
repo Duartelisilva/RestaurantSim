@@ -6,6 +6,7 @@ using RestaurantSim.Application.Commands.AdvanceDining;
 using RestaurantSim.Application.Commands.AdvanceKitchen;
 using RestaurantSim.Application.Commands.AdvanceMood;
 using RestaurantSim.Application.Commands.AdvanceStaffShift;
+using RestaurantSim.Application.Commands.AdvanceTableMoves;
 using RestaurantSim.Application.Commands.EndDay;
 using RestaurantSim.Application.Commands.ProcessQueueAbandonment;
 using RestaurantSim.Application.Commands.SpawnArrival;
@@ -61,6 +62,7 @@ public sealed class RestaurantTickProcessor
 
         await _repository.SaveAsync(restaurant, cancellationToken);
 
+        await TryDispatchAsync(new AdvanceTableMovesCommand(restaurant.RestaurantId), restaurant.RestaurantId, cancellationToken);
         await TryDispatchAsync(new AdvanceKitchenCommand(restaurant.RestaurantId), restaurant.RestaurantId, cancellationToken);
         await TryDispatchAsync(new AdvanceDiningCommand(restaurant.RestaurantId), restaurant.RestaurantId, cancellationToken);
         await TryDispatchAsync(new SpawnArrivalCommand(restaurant.RestaurantId), restaurant.RestaurantId, cancellationToken);

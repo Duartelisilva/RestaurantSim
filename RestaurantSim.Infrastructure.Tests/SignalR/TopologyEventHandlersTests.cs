@@ -27,7 +27,7 @@ public sealed class TopologyEventHandlersTests
     {
         var handler = new ClustersMergedNotificationHandler(_hubContext);
 
-        await handler.Handle(new ClustersMerged(_restaurantId, 3, [3, 4], [3, 4], 4, 120), CancellationToken.None);
+        await handler.Handle(new ClustersMerged(_restaurantId, 3, [3, 4], [3, 4], 4, [], 0, 120), CancellationToken.None);
 
         await _proxy.Received(1).SendCoreAsync(
             ClientEventNames.ClustersMerged,
@@ -47,7 +47,7 @@ public sealed class TopologyEventHandlersTests
         var handler = new ClusterSplitNotificationHandler(_hubContext);
         var restored = new List<ClusterRestored> { new(3, [3], 2), new(4, [4], 2) };
 
-        await handler.Handle(new ClusterSplit(_restaurantId, 3, restored, 300), CancellationToken.None);
+        await handler.Handle(new ClusterSplit(_restaurantId, 3, restored, [], 0, 300), CancellationToken.None);
 
         await _proxy.Received(1).SendCoreAsync(
             ClientEventNames.ClusterSplit,

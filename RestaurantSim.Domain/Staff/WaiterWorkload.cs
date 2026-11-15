@@ -15,10 +15,24 @@ public static class WaiterWorkload
         if (waiters.Count == 0)
             return null;
 
+        var load = SeatedGroupsByWaiter(restaurant);
+
         return waiters
-            .OrderBy(w => restaurant.Floor.Clusters.Count(c => c.OccupiedBy is not null && c.AssignedWaiterId == w.StaffId))
+            .OrderBy(w => load.GetValueOrDefault(w.StaffId))
             .ThenBy(w => w.StaffId)
             .First()
             .StaffId;
+    }
+
+    // Seated groups per waiter: the occupied clusters assigned to each. A waiter with nobody
+    // seated is simply absent (read it with GetValueOrDefault).
+    public static IReadOnlyDictionary<int, int> SeatedGroupsByWaiter(Restaurant restaurant)
+    {
+        return restaurant.Floor.Clusters
+            .Where(c => c.OccupiedBy is not null)
+            .Select(c => c.AssignedWaiterId)
+            .OfType<int>()
+            .GroupBy(waiterId => waiterId)
+            .ToDictionary(g => g.Key, g => g.Count());
     }
 }
