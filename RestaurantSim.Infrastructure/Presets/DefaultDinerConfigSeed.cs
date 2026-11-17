@@ -1,4 +1,4 @@
-﻿using RestaurantSim.Domain;
+using RestaurantSim.Domain;
 using RestaurantSim.Domain.Scheduling;
 using RestaurantSim.Domain.Staff;
 
@@ -31,6 +31,8 @@ public static class DefaultDinerConfigSeed
         PatienceDecayBaseline = null, // open, pending playtesting (presets doc)
         ReinformMoodPenalty = null, // open, pending playtesting
         PreOpeningLeadMinutes = 30,
+        MaxMergeGapCells = 1, // "nearby only": tables one empty cell apart can be slid together (mechanics doc §18)
+        TableMoveSecondsPerCell = 2f, // first-pass, "fairly short"; pending playtesting
         QueueWaitMoodDecayPerSecond = -0.4f,
         CourseWaitMoodDecayPerSecond = -0.3f,
         NaturalMoodRecoveryPerSecond = 0.5f,

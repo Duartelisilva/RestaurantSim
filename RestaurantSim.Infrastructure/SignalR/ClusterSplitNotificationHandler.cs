@@ -21,6 +21,8 @@ public sealed class ClusterSplitNotificationHandler : INotificationHandler<Clust
         var dto = new ClusterSplitDto(
             notification.MergedClusterId,
             notification.Restored.Select(r => new ClusterRestoredDto(r.ClusterId, r.TableIds, r.Capacity)).ToList(),
+            TableMoveMapping.ToDtos(notification.Moves),
+            notification.DurationTicks,
             notification.Tick);
 
         return _hubContext.Clients

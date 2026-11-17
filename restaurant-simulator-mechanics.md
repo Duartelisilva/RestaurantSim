@@ -37,13 +37,12 @@ generation. Defaults to `1.0` (no change vs. the base curve) if unset.
 
 Base rates — **corrected, coherence-check pass: named as real
 `RestaurantConfig` fields instead of hardcoded literals called
-"preset-tunable" with nothing actually backing them** — applied every
-tick:
+"preset-tunable" with nothing actually backing them** — applied **per real second** (per tick as `rate / TicksPerRealSecond`, `TickRates.PerTick` — tick-rate independent, §14):
 | Source | Rate |
 |---|---|
-| Queue wait | `QueueWaitMoodDecayRate × PatienceModifier_decay` (default `-0.4`) |
-| Course wait | `CourseWaitMoodDecayRate × PatienceModifier_decay` (default `-0.3`) |
-| Natural recovery (seated/eating) | `NaturalMoodRecoveryRate × PatienceModifier_recovery` (default `+0.5`) |
+| Queue wait | `QueueWaitMoodDecayPerSecond × PatienceModifier_decay` (default `-0.4`) |
+| Course wait | `CourseWaitMoodDecayPerSecond × PatienceModifier_decay` (default `-0.3`) |
+| Natural recovery (seated/eating) | `NaturalMoodRecoveryPerSecond × PatienceModifier_recovery` (default `+0.5`) |
 
 Discrete events (flat, not per-tick):
 | Event | Delta |
@@ -68,7 +67,12 @@ with `Status != Served`. The docs above describe this at table/group level
 (`CoursePhase`); per-person means a customer whose own dish already arrived,
 while a tablemate's is still cooking, correctly gets recovery while the
 tablemate still decays. **Worth confirming** — it's the intended reading
-here but not explicitly stated before. No domain event fires per tick
+here but not explicitly stated before. **Known gap:** a customer who has not ordered yet owns no un-served item, so
+while waiting for a waiter's visit they get *recovery*, not decay — yet business
+logic §1.4 says waiting for the waiter uses the same wait mechanic as the queue.
+The service-flow draft's overdue-visit Mood condition (§17) is the intended fix;
+it is dormant until staff movement exists, so for now waiting for a waiter
+costs no Mood (status doc D-35). No domain event fires per tick
 (architecture doc §3); `MoodChanged` is reserved for a future, targeted use
 on Mood **tier** boundary crossings.
 
@@ -77,10 +81,10 @@ Clamp `Mood ∈ [0,100]` after every apply.
 **Mood tiers:**
 | Tier | Range |
 |---|---|
-| High | 70–100 |
-| Mid | 40–69 |
-| Low | 15–39 |
-| Very Low | 0–14 |
+| High | `Mood ≥ 70` |
+| Mid | `40 ≤ Mood < 70` |
+| Low | `15 ≤ Mood < 40` |
+| Very Low | `Mood < 15` |
 
 **Queue abandonment (new — implementation-phase backport; business logic
 §1.2).** A queued group abandons when its average Mood drops below
@@ -142,7 +146,8 @@ P(file) = min(0.3, 0.05 × (1 - Mood/100) × InstabilityMultiplier(I))
 InfluenceWeight = IsAdult ? 1.5 : 1.0
 GroupWeightedAvg_i = Σ(Mood_j × InfluenceWeight_j) / Σ(InfluenceWeight_j)   // j ≠ i
 
-SpreadRate = 0.05/tick   // 0.075/tick if full-group avg Mood < 30 (tipping point)
+SpreadRate = 0.05 per real second   // 0.075 per real second if full-group avg Mood < 30 (tipping point)
+                                    // applied per tick as rate / TicksPerRealSecond (§14); unchanged numbers at TicksPerRealSecond = 1
 
 MoodDelta_i = SusceptibilityToGroup_i × (GroupWeightedAvg_i - Mood_i) × SpreadRate
 ```
@@ -222,14 +227,17 @@ formula as undefined).
 
 ## 7. Evaluation Cadence
 
-- **Mood decay/recovery**: applied every `SimulationTick`.
+- **Mood decay/recovery**: applied every `SimulationTick`, scaled per tick from per-real-second rates (§2, §14).
 - **Probability rolls** (complaint, filing, inter-group spread): throttled to
   discrete checkpoints, not evaluated per-tick. Reuses `CustomerGroup`'s
   existing `PhaseWaitState`/`NextAutoVisitTick` fields for wait-based checks;
   `ProbabilityCheckpointIntervalSeconds` (`RestaurantConfig`, entity doc
   §22 — **added, coherence-check pass**, converted to ticks per §14),
   default 3 seconds, as a starting value. Also rolled immediately on any
-  discrete Mood-changing event (food arrives, waiter interaction resolves).
+  discrete Mood-changing event (food arrives, waiter interaction resolves). **⚠ Collision:** `AdvanceDiningCommand` now uses
+  `PhaseWaitState` / `NextAutoVisitTick` / `NextVisit` to schedule waiter
+  visits, so those fields can no longer also serve as the checkpoint timer; a
+  separate per-group next-checkpoint tick is needed (status doc D-04).
 - This section defines *cadence* only (what runs every tick vs. at
   checkpoints) — the *order* these systems run in within one tick is
   locked separately in architecture doc §2a (**resolved, backported from
@@ -256,6 +264,7 @@ touching any formula or preset content in this document.
 - Movement smoothness is a **rendering concern**, not a simulation-rate
   concern — keeps Domain transport-ignorant, no extra ticking
   infrastructure, no full-state-per-tick broadcast.
+- **Status (backported):** client-side movement interpolation (`MovementStarted { EntityId, Path, StartTick, DurationTicks }`) is still the plan; the client state model (`RestaurantStore`) does not block it. Backend movement/pathfinding is a separate, unbuilt phase. Table sliding (§18) is the one server-authoritative move that exists today (timed, no pathing).
 
 ---
 
@@ -488,9 +497,9 @@ P(FoodQualityEvent | !IsHighQuality) = 0.03 × EffectiveErrorRate   // BaseEvent
 
 **Decay — high-quality items decay slower under the lamp:**
 ```
-EffectiveDecayRate = HeatLamp.QualityDecayRatePerTick × (IsHighQuality ? 0.5 : 1.0)
+EffectiveDecayRate = HeatLamp.QualityDecayRatePerSecond × (IsHighQuality ? 0.5 : 1.0)   // per REAL second (renamed from ...PerTick)
 BaseQuality = IsHighQuality ? 100 : (FoodQualityEvent ? 30 : 80)
-QualityAtServe = clamp(BaseQuality - HeldTicks × EffectiveDecayRate, 0, 100)
+QualityAtServe = clamp(BaseQuality - HeldTicks × (EffectiveDecayRate / TicksPerRealSecond), 0, 100)   // TickRates.PerTick
 ```
 
 **Mood impact at serve:**
@@ -607,6 +616,11 @@ most recent joke at that table — from either AutoManager **or** the
 player. Player jokes are never blocked by this cooldown themselves, but
 they still update the timer, so AutoManager won't immediately stack a
 joke right after the player already spent one on that table.
+
+**⚠ Tick-rate dependence (open):** the trigger probabilities above are rolled
+once per AutoManager pass, and a pass runs every tick, so the effective rate
+scales with `TicksPerRealSecond` — it breaks §14's "nothing authored in ticks"
+rule. Needs a cadence or per-real-second hazard decision (status doc D-05).
 
 ### Targeting
 
@@ -900,8 +914,8 @@ built with first-pass coefficients (see the bullets below):
 ```
 FatigueDelta_per_tick =
   0                                          if State == OffShift
-  BaseFatigueAccrualRate                     if State != OffShift, not held past ShiftEnd
-  BaseFatigueAccrualRate × OvertimeFatigueMultiplier
+  BaseFatigueAccrualPerSecond                     if State != OffShift, not held past ShiftEnd
+  BaseFatigueAccrualPerSecond × OvertimeFatigueMultiplier
                                               if held past their own ShiftEnd
                                               by the coverage rule (entity doc §6/§24a)
 
@@ -913,10 +927,10 @@ Fatigue = clamp(Fatigue + FatigueDelta_per_tick, 0, 1)   // StaffStats range, en
   staff available to relieve them) accrues `Fatigue` **faster**, not
   slower, matching the real cost of understaffing rather than treating
   overtime as free.
-- `BaseFatigueAccrualRate` and `OvertimeFatigueMultiplier` are both
+- `BaseFatigueAccrualPerSecond` and `OvertimeFatigueMultiplier` are both
   `RestaurantConfig` fields (entity doc §22), still pending playtesting. **First-pass
   defaults now exist (implementation-phase backport)** — derived from a
-  stated design intent rather than guessed: `BaseFatigueAccrualRate` targets
+  stated design intent rather than guessed: `BaseFatigueAccrualPerSecond` targets
   "reaches ~1.0 `Fatigue` by the end of a typical 12-hour shift", and
   `OvertimeFatigueMultiplier = 2.0` (confirmed in chat: overtime is more
   tiring, not less).
@@ -930,6 +944,7 @@ Fatigue = clamp(Fatigue + FatigueDelta_per_tick, 0, 1)   // StaffStats range, en
   fatigue at all. Either the intent was meant in real time (then say so, and
   the rate should be derived from `MinutesPerTick` so it stays consistent if
   that knob changes) or the default is ~60× too low. Not changed here.
+  **Update (tick-rate independence pass):** the field is now `BaseFatigueAccrualPerSecond` — a per-REAL-second rate, applied per tick as `rate / TicksPerRealSecond`; numbers unchanged at `TicksPerRealSecond = 1`. The unit question above (12 real vs in-game hours) is **unchanged and still open**.
 - Resets to `0` on the `Busy`/`Idle → OffShift` transition at `ShiftEnd`
   (entity doc §6/§24a) — unaffected by this section, already locked.
 
@@ -963,6 +978,9 @@ action), regardless of how short the authored value is relative to
 systematic bias: floor would make every fractional-tick duration
 consistently shorter than authored, ceil consistently longer — round
 averages out to unbiased across the full set of durations in a preset.
+**Implementation note:** C#'s default `Math.Round` is banker's rounding;
+`EffectiveTicks` must use `MidpointRounding.AwayFromZero` to match "round-half-up"
+(status doc V-02).
 
 This applies uniformly to every duration this document defines a tunable
 for: `MenuItem.PrepTimeSeconds` (replaces raw `PrepTicks` as the authored
@@ -981,27 +999,38 @@ happened.
 **Current default:** `TicksPerRealSecond = 1` (1 tick = 1 real second) —
 confirmed MVP baseline, not a placeholder pending a different decision.
 
-**Tick resolution vs. perceived game speed — clarified, coherence-check
-pass.** `MinutesPerTick` and `TicksPerRealSecond` remain independently
-authored fields (§2 of the architecture doc — "neither implies the
-other"), but a preset author who wants **finer tick resolution without
-changing how fast the game feels to play** should jointly tune them
-rather than changing one in isolation:
+**Rule — durations in seconds, rates per second, nothing authored in ticks
+(tick-rate independence pass, decided and built).** Durations convert via
+`EffectiveTicks` above (`TickRates.SecondsToTicks`). Continuous per-tick
+*rates* are likewise authored **per real second** and applied per tick as
+`rate / TicksPerRealSecond` (`TickRates.PerTick`): `QueueWaitMoodDecayPerSecond`,
+`CourseWaitMoodDecayPerSecond`, `NaturalMoodRecoveryPerSecond`,
+`BaseFatigueAccrualPerSecond`, `HeatLamp.QualityDecayRatePerSecond`, and the
+Mood-spread constants (§4). All numbers are unchanged at `TicksPerRealSecond = 1`.
+(Older call sites such as `KitchenPrepTimeCalculator.PrepTicks` still do their
+own seconds → ticks conversion with the same formula — duplication to clean up
+later, not urgent.)
+
+**Game pace vs. tick resolution — revised.** The earlier guidance to "jointly
+tune `MinutesPerTick`" is replaced by a field: `RestaurantConfig.GameMinutesPerRealSecond`
+(`double`, `default_diner` = 1) is the authored pace; `MinutesPerTick` is no
+longer stored but derived:
 
 ```
-MinutesPerTick = DesiredInGameMinutesPerRealSecond / TicksPerRealSecond
+MinutesPerTick = GameMinutesPerRealSecond / TicksPerRealSecond     // may be fractional
 ```
 
-Example: MVP default is 1 in-game minute passing per real second
-(`MinutesPerTick=1`, `TicksPerRealSecond=1`). Moving to
-`TicksPerRealSecond=4` (ticks every 0.25 real seconds — smoother
-movement/finer kitchen-scheduling granularity) while keeping the same
-*perceived* pace requires `MinutesPerTick=0.25`, so 4 ticks still add up
-to exactly 1 in-game minute per real second — unchanged from before. This
-isn't a new field or a locked relationship; it's guidance for whoever
-tunes these two values together, since getting it wrong either speeds up
-or slows down the game unintentionally as a side effect of a resolution
-change.
+Changing `TicksPerRealSecond` (e.g. 1 → 4 for smoother movement / finer kitchen
+scheduling) therefore never changes perceived pace — 4 ticks of 0.25 in-game
+minutes still add up to 1 in-game minute per real second — and the old
+int-vs-0.25 contradiction is gone.
+
+**Pacing (built).** `SimulationTickService` paces each restaurant by its own
+`TicksPerRealSecond` via `TickPacer`: the loop wakes every ~10 ms and ticks each
+restaurant that is due (practical ceiling ≈ 60 ticks/s from OS timer
+resolution); an overloaded host drops the backlog and slows down rather than
+bursting ticks. No doc contradiction existed here — the code now matches this
+section. The client `GameClock` caveat is gone.
 
 ---
 
@@ -1022,6 +1051,22 @@ Closing = latest EndTime among RestaurantConfig.ActiveMealPeriods
 
 A restaurant's day runs from `Opening` to whenever `Closing` is reached
 **and** the restaurant has actually cleared out — not a fixed tick count.
+
+**Start of game (added — backported).** A new restaurant's first tick is
+`PreOpeningLeadMinutes` (`RestaurantConfig`, nullable, code default 30)
+in-game minutes before Opening, clamped to the start of day
+(`MealPeriodCalculator.InitialTick`). **⚠ Inconsistency to decide:**
+`EndDayCommand` (action 5 below) advances every later day to exactly Opening,
+with no lead, so only day 0 gets the lead. Recommended: leave as is (§15 is
+locked) — **owner to confirm.**
+
+**Late-ordering gap (found while building the dining flow).** A group seated
+before closing could not order after its period ended (`PlaceOrderItemValidation`
+required an *active* period), which would have stalled it and blocked day-end
+forever. Fix: `MealPeriodCalculator.FindServicePeriod` returns the active
+period, else the one that ended most recently, else (past midnight) the day's
+last-ending period; both `PlaceOrderItemValidation` and the dining flow (§17)
+use it.
 
 ### Day-end trigger
 
@@ -1048,7 +1093,10 @@ literal formula. Fixed by special-casing `Closing >= 1440` to check
 `minutesIntoDay == 0` instead. This holds for MVP's `MinutesPerTick = 1`
 (`minutesIntoDay` passes through exactly `0` once per day) but is **not
 necessarily a general solution** for every possible tick-resolution config
-(e.g. a `MinutesPerTick` that skips over `0`).
+(e.g. a `MinutesPerTick` that skips over `0`). With the authoring constraint in entities §24a (`1440 / MinutesPerTick`
+must be a whole number, validated at preset load), every allowed configuration
+passes through exactly `0` once per day, so the special case is sound and is
+equivalent to checking time-of-day ticks `== 0`.
 
 Checked at the same tick-scheduled cadence as other timed transitions
 (§8). On `DayEndEligible == true`, the sim loop dispatches
@@ -1087,7 +1135,7 @@ For an **intra-day** gap between two of a restaurant's own active periods
 (e.g. 15:00–19:00 between Lunch and Dinner in a lunch+dinner-only
 preset) — not applicable at the true end of day, which `EndDayCommand`
 already auto-advances past. Player-facing, optional convenience — matches
-Duarte's "could allow to skip the time, or speed it up" framing, i.e. this
+the owner's "could allow to skip the time, or speed it up" framing, i.e. this
 is a nicety, not a forced behavior.
 
 ```
@@ -1103,7 +1151,7 @@ by construction. `OffShift` spans a staff member's full daily shift
 (entity doc §6/§24a) — a staff member rostered across the gap (e.g.
 `["lunch", "dinner"]`, `default_diner`'s own MVP default) does **not** go
 `OffShift` during it. Now that `Fatigue` accrual has a real formula
-(§13a): `FatigueDelta_per_tick = BaseFatigueAccrualRate` applies purely
+(§13a): `FatigueDelta_per_tick = BaseFatigueAccrualPerSecond` applies purely
 from `State != OffShift`, with no dependency on customer/order activity
 — so skipping the gap's ticks **does genuinely undercount** that staff
 member's `Fatigue` for the skipped stretch, a real (if likely small)
@@ -1126,7 +1174,7 @@ is defined, so it isn't retrofitted later or built twice:
 ```
 SeasonDefinition (preset data, string-keyed like MealPeriodDefinition):
   SeasonId: string   // e.g. "spring", "summer", "winter", "holiday_week"
-  DayCount: int      // independent per season — 7 is Duarte's starting
+  DayCount: int      // independent per season — 7 is the proposed starting
                       // default, not a fixed rule; a "holiday_week" could
                       // be shorter, a "winter" longer
 
@@ -1144,87 +1192,186 @@ this indexing shape is built now.
 
 ---
 
-## 16. Doc-Sync Notes (pending — not yet applied to entities/architecture docs)
+## 16. Change Log (backport history)
 
-Items this session introduced or clarified that touch the **entity** or
-**architecture** docs but haven't been folded back into them yet (both are
-outside this file's edit scope). Apply when those docs are next revised:
+History only — open items and verification points live in
+`restaurant-simulator-status.md`.
 
-- ~~**`DeliverOrderItem` command** — new, introduced in §10 (Plating &
-  Delivery). Needs adding wherever the command list eventually gets
-  formalized.~~ **Resolved** — `DeliverOrderItemCommand` is listed in
-  `CLAUDE.md`'s "Commands Introduced This Session" section.
-- **`OrderItem.HeldSinceTick` semantics** — entity doc states this is set
-  when `Status → HeldUnderLamp`; §10 clarifies the hold period now explicitly
-  **ends at pickup for delivery**, not at arrival at the table. Not a
-  contradiction, but the entity doc's field description could note this
-  explicitly for clarity.
-- **Kitchen "pass point"** — §10's delivery leg needs a real `GridPosition`
-  to path from (where a cooked item becomes pickup-ready), and neither
-  `KitchenStation` nor the `default_diner_layout` preset currently define
-  one. Likely a single fixed point per kitchen layout, added to the presets
-  doc/layout JSON — not a schema change to `KitchenStation` itself.
+- **Concurrency-sweep session:** per-restaurant lock model, `DeliverOrderItem`
+  plating/delivery leg, `Bathroom`, joke fatigue, `Table.IsClean`, derived
+  `TableCluster.State`, `Customer` presence/gender fields, named commands.
+- **Coherence-check passes:** day/season boundaries (§15), meal periods,
+  seconds-authored durations (§14; `ShortDelayThresholdSeconds`,
+  `MaxAcceptableWaitSeconds`, `PlatingTimeSeconds`), `TipBaseRate` /
+  `TipMoodExponent`, `PatienceDecayBaseline` wired into §2, Busser two-tier
+  priority, bathroom visit trigger, `ComplaintsBookModule` moved to DLC.
+- **Implementation-phase backport:** §2 (re-inform penalty, per-person course
+  wait, queue-abandonment threshold/penalty), §4 (queued-group spread,
+  present-only tipping point, single snapshot), §5, §6 (payer's Mood), §10
+  (pre-assignment course-sync, queued-sibling projection, serve-time presence,
+  pickup items, delivery scope), §11 (resolved success roll), §13/§13a
+  (first-pass defaults), §15 (midnight edge case, `EndDayCommand` status).
+- **Second backport (client/UI contract, dining flow, merge/movement,
+  tick-rate independence):** §2/§4/§10/§13a/§14 (per-second rates,
+  `GameMinutesPerRealSecond`, pacing, rounding rule), §8 status, §15
+  (start-of-game rule, late-ordering fix), new §17 (partial) and §18.
+- **Consistency pass:** Mood tiers made half-open; waiter-action wording
+  aligned with §11; wait-for-waiter Mood gap and checkpoint-timer collision
+  recorded (§2, §7); tick-rate-dependence flags (§11); terminology and
+  provenance clean-up across all docs.
 
-**New items from the concurrency-sweep session — entity doc:** ~~all items
-below~~ **Resolved** — the entity doc's §5 (`TableCluster.State` derived,
-`RecentJokeCount`/`LastJokeTick`), §9 (`Customer.IsPresentAtTable`/`Gender`/
-`HasUsedBathroom`), and §24 (`Bathroom` entity) already contain everything
-flagged here, and `CLAUDE.md`'s "Commands Introduced This Session" section
-already lists all four new commands. Kept here only as a historical record
-of what this session originally flagged — no further action needed.
+---
 
-**New items — architecture doc:** ~~all items below~~ **Resolved** — the
-architecture doc's §11 "Concurrency Model" (and §2, §5 updates) now cover
-every point that was pending here: the per-`RestaurantId` lock/pipeline
-behavior, AutoManager's per-decision sequencing, `IStaffTaskPriorityStrategy`,
-`Restaurant.AutoManagerToggles`, the named "check all, then commit all"
-convention (also in `CLAUDE.md`), the cross-restaurant tick-scheduling note
-in §2, and the lock-fairness standing note. Kept here only as a historical
-record of what this session originally flagged — no further action needed.
+## 17. Service Flow 🚧 (backported — full draft still awaiting approval)
 
-**New items — presets/config doc:**
+**Status.** The waiter-visit / ordering / eating / paying flow has its own
+draft, `DRAFT-service-flow.md`, which was presented separately and was **not
+part of this backport**. Only what the pending-changes register records is
+written here; the draft's own text (visit timing rules, the `PhaseWaitState`
+value definitions, the overdue-visit Mood branch, the config-field table) still
+has to be merged once approved. Knock-on edits to register at that point:
+entities §8 `PhaseWaitState` values, mechanics §2 overdue-visit Mood
+condition, CLAUDE.md command list, presets rows.
 
-- ~~`RestaurantConfig.TicksPerRealSecond` — new field, see §14 of this
-  doc.~~ **Resolved** — added to the entity doc's §22 field table
-  (coherence-check pass).
-- ~~Every preset duration field needs renaming/reauthoring from raw tick
-  counts to seconds (e.g. `MenuItem.PrepTicks` → `MenuItem.PrepTimeSeconds`)
-  per §14's conversion pattern.~~ **Resolved** — `MenuItem.PrepTicks`
-  renamed to `PrepTimeSeconds` in the entity doc's §18 (coherence-check
-  pass); this doc's §10 formula updated to derive `PrepTicks` from it.
-- ~~New "open, pending playtesting" tunables introduced this session, to
-  be added alongside `PatienceDecayBaseline`: `AutoJokeCooldownSeconds`,
-  `MoodGapThreshold` (joke targeting), bathroom visit sub-step durations
-  (Male/Female × UseFacilities/WashHands), `TableCleaningBaseSeconds`,
-  `BathroomCleaningBaseSeconds`, `AlmostDirtyThreshold`/`DirtyThreshold`
-  for bathroom cleanliness.~~ **Resolved** — all added to the entity
-  doc's §22 field table (coherence-check pass). Naming convention for
-  all of these: the preset-authored field takes the `*Seconds` suffix;
-  the derived value a formula actually consumes (e.g. `BaseTicks` in
-  §13) is computed from it at load time per §14 — the two are never the
-  same name.
-- Bathroom layout entries needed in `default_diner_layout` — door
-  position(s) for Male/Female/Staff bathrooms.
-- **Second coherence-check pass:** the "Resolved" claim above was actually
-  incomplete — `ShortDelayThreshold`, `MaxAcceptableWaitTicks`, and
-  `PlatingTicks` had all been added to the entity doc still carrying
-  `Ticks`-style names despite being seconds-authored (or, worse, typed
-  `(seconds)` while literally named `Ticks`), violating the same-name rule
-  this note claimed was already enforced. Renamed to
-  `ShortDelayThresholdSeconds`, `MaxAcceptableWaitSeconds`,
-  `PlatingTimeSeconds` (entity doc §22, presets doc, this doc's §10) —
-  now actually resolved.
-- Also added in this pass: `TipBaseRate`/`TipMoodExponent` (§6, entity
-  doc §22) to back the tip formula's previously-unnamed literal
-  coefficients, and `PatienceDecayBaseline` wired into the §2 decay
-  formula (was defined as a field but never consumed anywhere).
+**Built (step 16 part 1 — pure logic; step 17 — `AdvanceDiningCommand`):**
+`ServiceFlowConfig` (nested record on `RestaurantConfig.ServiceFlow`, defaults =
+the approved values, so no preset or test-builder changes), `OrderGenerator`,
+`ServiceFlowTimings`, `TickRates.SecondsToTicks`. `SeatGroupCommand` schedules
+the group's first waiter visit `SeatedToFirstVisitSeconds` after seating.
+`AdvanceDiningCommand` (tick step 1, after `AdvanceKitchen`) drives visits,
+order placement, delivery, payment and leaving by calling the other commands'
+handlers directly while holding the lock (CLAUDE.md, nested-handlers pattern).
 
-**Implementation-phase backport pass (items from `PENDING-DOC-CHANGES.md`).**
-Merged into this doc: §2 (re-inform penalty, per-person course-wait reading,
-queue-abandonment threshold/penalty), §4 (queued-group spread, present-only
-tipping point, single snapshot), §5, §6 (payer's Mood), §10 (pre-assignment
-course-sync method, queued-sibling projection, serve-time presence rule,
-pickup items, delivery scope), §11 (resolved success roll), §13/§13a
-(cleaning and fatigue defaults, ⚠ fatigue unit discrepancy), §15 (midnight
-edge case, `EndDayCommand` status). Interpretation calls marked "worth
-confirming" above remain open until the owner decides.
+**Owner decisions folded into the draft:**
+- One drink in the drinks phase, plus at most one refill at a mid-meal visit;
+  exactly one main; at most one dessert and/or one coffee each (coffee deferred
+  — no menu change for now).
+- Strong Budget price bias (rare but possible expensive picks).
+- Rechecks halve the not-ready odds.
+- Absent (bathroom) members are assumed to have decided and are included in the
+  order.
+- Adults pick only from the Adult menu (the shared `MenuItemEligibility.IsOrderable`
+  rule alone would let them order kids' items).
+
+**Dining stage (derived, never stored — entities §8).** `DiningStageCalculator`;
+first match wins:
+
+| Condition | Stage |
+|---|---|
+| `LifecycleState == Leaving` | `Leaving` |
+| `PhaseWaitState != Serving` and `NextVisit == Bill` | `Paying` |
+| `PhaseWaitState != Serving` (AutoVisitPending, RecheckScheduled, AwaitingDecision) | `Ordering` |
+| `Serving` and any order item not `Served` | `WaitingForFood` |
+| `Serving`, all items `Served` | `Eating` |
+
+`Serving` must win over `NextVisit == Bill`: the dessert order already sets
+`NextVisit = Bill` while the dessert is still being cooked and eaten.
+`AwaitingDecision` is never persisted — decided and resolved inside one call.
+
+**Event rule.** `GroupDiningStageChanged` is raised by
+`AdvanceDiningCommandHandler` at most once per group per tick (stage at the
+start of the group's pass vs. at its end), only on change, and not for a group
+that left (`GroupLeft` covers that). A recheck ("not ready") stays `Ordering`,
+so it raises nothing. A just-seated group is `Ordering` by definition:
+`GroupSeated` implies it, no extra event. It is published after the handler's
+single `SaveAsync`.
+
+**Current placeholders — revisit when staff actually walk (§8–9).** Instant
+seating, instant order-taking visits and instant food delivery. With movement:
+waiters are `Busy` while walking, the §17 delays become *minimums* on top of
+travel time, the Host/waiter guides the group to the table, and the
+"overdue visit" Mood branch (draft §6) stops being dormant. Arrival/seat/leave
+events stay; movement events are added beside them. Business logic §1.4
+("delay depends on waiter load") lands here.
+
+---
+
+## 18. Table Merge & Movement 🔒 (owner decisions — step 18 and chat 2)
+
+**Build status.** Domain (step 1) and Application + AutoManager (step 2) built.
+Wire events for the merge/split topology are built; the table-move fields on
+those events, `TableMoveCompleted` on the wire, the client store/visuals and
+the layout JSON/seed change are still to build (step 3). With the default
+layout, merges now become possible, so the AutoManager path triggers in the
+live game once the layout seed is updated.
+
+This replaces the earlier "tables must already touch" rule and the earlier
+"layout is the player's lever, no runtime merge in the default layout" note:
+staff physically slide tables together and back.
+
+**1. Max party size.** `TableMergeRules.MaxPartySize` = capacity of the longest
+valid mergeable chain (default layout: 3 tables per row → 6). Lives in Domain
+because arrival is core and must not depend on AutoManager being on. A party
+larger than that is **turned away at the door** (`GroupTurnedAway.Reason =
+PartyTooLarge`; the queue-full path stays `QueueFull`), with a reputation penalty
+from `RestaurantConfig.OversizedPartyReputationPenalty` (fraction of current
+reputation, **default 0**). A layout with no tables has no size limit
+(degenerate guard). `SpawnArrivalCommand`'s oversize check uses the floor
+geometry (gap rule included).
+
+**2. Merge rule.** Tables merge only if all hold: same lane (row, for N/S
+seats), consecutive, gap ≤ `MaxMergeGapCells` (default 1, "nearby only"),
+seats-perpendicular axis (entities §2/§4/§5, `CanMerge` first), the gap cells
+are free of other furniture, and the clusters involved are free. Blocked cells
+= every placeable's footprint (`Footprint`, `OccupiedCells ?? Hitbox`, entities
+§1), including other tables. `MergeGeometry` carries the max gap + blocked cells;
+`TableMergeRules.PlanMerge` plans (stayer + waiter + slides), `PlanReturn` plans
+the way back (atomic or null). Clusters slide as rigid blocks. No merge cap on
+chain length; block-shaped (2×2) merges remain unsupported (entities §5).
+
+**3. Who moves.** 3+ tables in a line → the middle one stays and the others
+slide in. 2 tables → they close up toward the waiter with the fewest seated
+groups among the waiters of THESE clusters only (ties → lowest id); that
+waiter's table stays, the other slides.
+
+**4. Waiter / sections.** Merging ignores sections (a real restaurant just
+pushes the tables together). The merged cluster's `AssignedWaiterId` = the
+waiter chosen above; the older "least-loaded of all on-shift waiters" rule
+(`WaiterWorkload.LeastLoadedWaiterId`) is now only the fallback when none of the
+merged clusters has a waiter.
+
+**5. Timing.** Moving is a timed task:
+`duration = distance_cells × TableMoveSecondsPerCell` (config, first-pass 2 s),
+converted per §14, minimum 1 tick; all moved tables share the longest
+duration (`TableMoveTiming.DurationTicks`; 0 when nothing moves).
+Server-authoritative like §8: the cluster stays `Moving` until `MoveEndTick`,
+and the client interpolates the slide. **Deliberate simplification:** no staff
+member is reserved yet — staff walking/carrying comes with the movement phase.
+
+**6. Commands.** `MergeClustersCommand` validates with the floor geometry,
+plans with `PlanMerge`, then `Table.StartMove` for each slider: the LOGICAL
+position flips at command time (merge rules, anchors and blocked cells see the
+final layout), `MoveFrom` + `MoveEndTick = tick + DurationTicks` mark the
+slide, and the cluster is `Moving` until `AdvanceTableMovesCommand` clears it.
+The merged cluster takes the lowest component cluster id (no new id counter);
+`TableCluster.MergedFrom` is flattened to the ORIGINAL clusters.
+`SplitClusterCommand` slides the tables back to `HomePosition` with the same
+timing, only when the cluster is Free (so not Moving) — **atomic**: if any home
+cell is blocked, the split fails with `Result` and nothing moves (retried later;
+"check all, then commit all", architecture §11). Split restores the original
+cluster ids, tables, waiter assignment and `ManuallyAssigned`. Clusters authored
+pre-merged in a layout are not split (their normal state). **Not built:**
+splitting a partly-clean merged cluster to reuse its clean tables (business
+logic §1.3).
+
+**7. AutoManager (`ITableLayoutStrategy`, architecture §5).** Decision order:
+(1) split a free runtime-merged cluster unless a queued party *needs* it;
+(2) if anyone queued fits a free **or Moving** cluster as it is, do nothing (a
+Moving cluster that fits also blocks merging a second pair for the same party);
+(3) otherwise merge the smallest near/touching free clusters that fit the first
+party that fits nowhere. A Moving merged cluster is never split back.
+
+**8. Events.** `ClustersMerged` / `ClusterSplit` carry the RESULTING topology
+(idempotent) plus `Moves` (`TableMove`: TableId, From, To) and `DurationTicks`;
+`TableMoveCompleted(RestaurantId, ClusterId, Tick)` signals the cluster is
+usable again. `GroupTurnedAway` gained `Reason`.
+
+**9. Tick order (architecture §2a).** `AdvanceTableMovesCommand` runs **first**
+in step 1, before `AdvanceKitchen`: tables whose `MoveEndTick <= tick` complete
+(`Table.CompleteMove`), one `TableMoveCompleted` per cluster, published after
+the save.
+
+**10. Layout.** 6 standalone 2-tops in rows y=0 and y=2, columns x=0, 2, 4
+(presets doc); each table's `HomePosition` is its layout position. New config
+fields: `MaxMergeGapCells`, `TableMoveSecondsPerCell`,
+`OversizedPartyReputationPenalty` (entities §22).

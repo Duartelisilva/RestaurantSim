@@ -9,7 +9,7 @@ under `Api/Presets/` once implementation starts (see architecture doc §9,
 Portuguese terms used during design were placeholders for concepts, not
 intended in-game text.
 
-Status: 🔒 Locked
+Status: structure locked; numeric values are first-pass unless marked otherwise (see Status at the end)
 
 ---
 
@@ -19,21 +19,27 @@ Status: 🔒 Locked
 |---|---|---|
 | `ConfigId` | `"default_diner"` | |
 | `StartingCash` | `5000` | Currency assumed EUR (Portuguese-context project) |
-| `MinutesPerTick` | `1` | 1 tick = 1 simulated **in-game minute** — a separate knob from `TicksPerRealSecond` below (mechanics doc §14); a 12-hour service ≈ 720 ticks |
-| `TicksPerRealSecond` | `1` | **Added in concurrency-sweep session.** 1 tick = 1 real-world second (MVP default, confirmed baseline — see mechanics doc §14). Every duration field below is authored in real-world seconds and converted to ticks via this value at preset-load time; changing simulation speed later is a single-value edit here, nothing else in this file changes |
+| `GameMinutesPerRealSecond` | `1` | Game pace: 1 in-game minute per real second. **Replaces the stored `MinutesPerTick`** (tick-rate independence pass), which is now derived: `GameMinutesPerRealSecond / TicksPerRealSecond` (= 1 at the default `TicksPerRealSecond`; a 12-hour service ≈ 720 ticks). A separate knob from `TicksPerRealSecond` below (mechanics doc §14) |
+| `TicksPerRealSecond` | `1` | 1 tick = 1 real-world second (MVP default, confirmed baseline — see mechanics doc §14). Every duration field below is authored in real-world seconds and converted to ticks via this value at preset-load time; changing simulation speed later is a single-value edit here, nothing else in this file changes |
 | `ReputationStart` | `20` | New/unestablished restaurant — not bad, just not built up yet |
-| `ActiveMealPeriods` | `"lunch" (12:00–15:00), "dinner" (19:00–00:00)` — no `ArrivalCutoffTime` authored on either, so each defaults to its own `EndTime` (entity doc §24a) | **Added — coherence-check pass.** Typical sit-down restaurant hours, matching the "normal restaurant" default — `"breakfast"`/`"afternoon"` are valid `MealPeriodId` values (entity doc §24a) but unused by this preset. No arrivals spawn, no staff clocked in, outside these windows |
+| `ActiveMealPeriods` | `"lunch" (12:00–15:00), "dinner" (19:00–00:00)` — no `ArrivalCutoffTime` authored on either, so each defaults to its own `EndTime` (entity doc §24a) | Typical sit-down restaurant hours, matching the "normal restaurant" default — `"breakfast"`/`"afternoon"` are valid `MealPeriodId` values (entity doc §24a) but unused by this preset. No arrivals spawn, no staff clocked in, outside these windows |
 | `PatienceDecayBaseline` | *open* | Deliberately left untuned — needs real playtesting once Mood/Patience logic exists. Do not guess a number to fill this in; flag it as pending if asked |
-| `BaseFatigueAccrualRate` | `≈ 0.0000231` ⚠ | **Added — backported from implementation-phase decisions.** Per-tick Fatigue accrual while on-shift (mechanics doc §13a). First-pass default implemented from the intent "reaches ~1.0 by the end of a typical 12-hour shift". **⚠ Unit discrepancy, needs a decision:** `0.0000231 = 1/43,200` is 12 *real-time* hours of ticks, but with `MinutesPerTick = 1` an in-game 12-hour shift is only 720 ticks (`≈ 0.001389`/tick) — see mechanics doc §13a. Not changed here |
-| `OvertimeFatigueMultiplier` | `2.0` | **Added — backported from implementation-phase decisions.** Multiplier on the base rate while held past `ShiftEnd` by the coverage rule (entity doc §6/§24a, mechanics doc §13a). Confirmed in chat: overtime is more tiring, not less. First-pass; pending playtesting |
-| `QueueWaitMoodDecayRate` | `-0.4` | **Added — coherence-check pass.** Matches mechanics doc §2's locked default |
-| `CourseWaitMoodDecayRate` | `-0.3` | **Added — coherence-check pass.** Matches mechanics doc §2's locked default |
-| `NaturalMoodRecoveryRate` | `0.5` | **Added — coherence-check pass.** Matches mechanics doc §2's locked default |
-| `ProbabilityCheckpointIntervalSeconds` | `3` | **Added — coherence-check pass.** Matches mechanics doc §7's locked default |
-| `PathReplanMaxWaitSeconds` | `5` | **Added — coherence-check pass.** Matches mechanics doc §9's locked default |
-| `MaxCallAttempts` | `3` | **Added — coherence-check pass.** Matches entity doc §10's locked default |
-| `QueueAbandonmentMoodThreshold` | *unset → `15`* | **Added — implementation-phase backport.** Nullable; defaults to 15 if unset (the Very Low tier boundary, mechanics doc §2). Left unset in this preset — the default is the intended value. The reputation penalty (flat 0.5) is a code constant, not a field |
-| `ReinformMoodPenalty` | `3` | **Added — implementation-phase backport.** First-pass default (low end of the waiter-action-failure range, mechanics doc §2/§10). Nullable/open; pending playtesting |
+| `BaseFatigueAccrualPerSecond` | `≈ 0.0000231` ⚠ | Per-real-second Fatigue accrual while on-shift (was per tick; numbers unchanged at `TicksPerRealSecond = 1`) (mechanics doc §13a). First-pass default implemented from the intent "reaches ~1.0 by the end of a typical 12-hour shift". **⚠ Unit discrepancy, needs a decision:** `0.0000231 = 1/43,200` is 12 *real-time* hours of ticks, but with `MinutesPerTick = 1` an in-game 12-hour shift is only 720 ticks (`≈ 0.001389`/tick) — see mechanics doc §13a. Not changed here |
+| `OvertimeFatigueMultiplier` | `2.0` | Multiplier on the base rate while held past `ShiftEnd` by the coverage rule (entity doc §6/§24a, mechanics doc §13a). Confirmed in chat: overtime is more tiring, not less. First-pass; pending playtesting |
+| `QueueWaitMoodDecayPerSecond` | `-0.4` (per real second) | Matches mechanics doc §2's locked default |
+| `CourseWaitMoodDecayPerSecond` | `-0.3` (per real second) | Matches mechanics doc §2's locked default |
+| `NaturalMoodRecoveryPerSecond` | `0.5` (per real second) | Matches mechanics doc §2's locked default |
+| `ProbabilityCheckpointIntervalSeconds` | `3` | Matches mechanics doc §7's locked default |
+| `PathReplanMaxWaitSeconds` | `5` | Matches mechanics doc §9's locked default |
+| `MaxCallAttempts` | `3` | Matches entity doc §10's locked default |
+| `QueueAbandonmentMoodThreshold` | *unset → `15`* | Nullable; defaults to 15 if unset (the Very Low tier boundary, mechanics doc §2). Left unset in this preset — the default is the intended value. The reputation penalty (flat 0.5) is a code constant, not a field |
+| `ReinformMoodPenalty` | `3` | First-pass default (low end of the waiter-action-failure range, mechanics doc §2/§10). Nullable/open; pending playtesting |
+| `PreOpeningLeadMinutes` | `30` | In-game minutes before Opening that a new restaurant starts at, clamped to the start of day (mechanics doc §15) |
+| `BaseArrivalIntervalSeconds` | `15` *(proposed — implementation seed used `120`)* | **Row did not previously exist in this doc.** Tuning finding: `120` is "2 min at MVP tick rate" in *real* seconds, but one real second is one in-game minute, so 120 ticks = two in-game hours between groups (~245 ticks at lunch start with Reputation 20; a 3-hour lunch gets ~1 group). `15` ≈ a group every ~15 in-game minutes at base rate. Pending playtesting |
+| `OversizedPartyReputationPenalty` | `0` | Fraction of current reputation lost when an oversize party is turned away (mechanics doc §18) |
+| `MaxMergeGapCells` | `1` | "Nearby only" merging; tables up to 1 empty cell apart can be slid together (mechanics doc §18) |
+| `TableMoveSecondsPerCell` | `2` *(first-pass; code fallback)* | "Fairly short"; pending playtesting |
+| `ServiceFlow` | *nested; defaults* | `ServiceFlowConfig` nested record (timings in seconds, ready/refill/dessert chances, price bias, eating-duration ranges); omitted here = defaults (mechanics doc §17, draft pending approval) |
 | `EventModuleIds` | `[]` | No DLC modules active by default. Populate as modules are actually built (Phase 8 of the build order) — e.g. `ComplaintsBookModule` (entity doc §11), left off since it's a Portugal-specific mechanic, not universal |
 | `TableLayoutId` | `"default_diner_layout"` | See below |
 | `StaffRosterSeed` | see below | |
@@ -49,9 +55,9 @@ Status: 🔒 Locked
 | `MoodGapThreshold` | `20` | Mood-gap that triggers person-targeted vs. table-targeted jokes (mechanics doc §11). First-pass default. Pending playtesting |
 | `FacilitiesTimeSecondsMale`, `FacilitiesTimeSecondsFemale` | *open* | Gendered `UseFacilities` sub-step duration (mechanics doc §12). Pending playtesting |
 | `WashHandsTimeSecondsMale`, `WashHandsTimeSecondsFemale` | *open* | Gendered `WashHands` sub-step duration (mechanics doc §12). Pending playtesting |
-| `BaseBathroomVisitChance` | *open* | **Added — coherence-check pass.** Per-checkpoint base probability a present customer decides to go (mechanics doc §12). Pending playtesting |
-| `BathroomCooldownSeconds` | *open* | **Added — coherence-check pass.** Minimum time between a customer's bathroom trips (mechanics doc §12). Pending playtesting |
-| `EatingMealtimeVisitModifier` | *open* | **Added — coherence-check pass.** Multiplier reducing bathroom-visit chance while actively eating (mechanics doc §12). Pending playtesting |
+| `BaseBathroomVisitChance` | *open* | Per-checkpoint base probability a present customer decides to go (mechanics doc §12). Pending playtesting |
+| `BathroomCooldownSeconds` | *open* | Minimum time between a customer's bathroom trips (mechanics doc §12). Pending playtesting |
+| `EatingMealtimeVisitModifier` | *open* | Multiplier reducing bathroom-visit chance while actively eating (mechanics doc §12). Pending playtesting |
 | `AlmostDirtyThreshold`, `DirtyThreshold` | `60`, `30` | Two-tier bathroom cleanliness thresholds (mechanics doc §12). First-pass defaults — shape matches §12's "lead time before it costs Mood" intent; values not derived from anything more specific. Pending playtesting |
 | `TableCleaningBaseSeconds` | `60` | Base Busser table-cleaning duration (mechanics doc §13). First-pass default. Pending playtesting |
 | `BathroomCleaningBaseSeconds` | `180` | Base Busser bathroom-cleaning duration (mechanics doc §13). First-pass default. Pending playtesting |
@@ -65,16 +71,15 @@ Status: 🔒 Locked
 Kept separate from the config per the entity doc's own reasoning
 (layouts are reusable across multiple configs).
 
-**Tables:**
-- 4× standalone `standard_2top`
-- 1× pre-merged 4-top — 2 additional `standard_2top` tables, placed
-  adjacent and pre-merged into one `TableCluster` (`Capacity: 4`) at
-  layout-load time. This uses the same merge mechanism already defined
-  for live play (entity doc §5) — just authored as already-merged rather
-  than merged during a session. No new `TableShape` needed.
+**Tables (revised — table movement, owner decision):**
+- 6× standalone `standard_2top`, in two rows of three: row y=0 (T1, T2, T5) and
+  row y=2 (T3, T4, T6), columns x=0, 2, 4 — a 1-cell gap between neighbours,
+  which `MaxMergeGapCells = 1` lets staff slide together at runtime
+  (mechanics doc §18). *(Assumes 1×1-cell table footprints — hitbox sizes are not authored in any doc; status doc D-11.)* **The pre-merged T5+T6 4-top is removed.**
 
-**Total:** 6 physical `Table` entities → 5 `TableCluster`s, max capacity
-12 covers.
+**Total:** 6 physical `Table` entities → 6 `TableCluster`s, total capacity 12
+covers; max party size 6 (3 tables in a row, merged on demand). Replaces the
+earlier "4 standalone + 1 pre-merged 4-top → 5 clusters" layout.
 
 **Kitchen stations:**
 - 1× `grill`
@@ -85,13 +90,13 @@ Kept separate from the config per the entity doc's own reasoning
 **Station-type and heat-lamp values — added, implementation-phase backport.**
 This section gave station *counts* only; it never gave `Capacity` or
 `SpeedMultiplier` per `KitchenStationType`, and never gave
-`HeatLamp.QualityDecayRatePerTick` (only `SlotCount: 3`) — and, unlike other
+`HeatLamp.QualityDecayRatePerSecond` (only `SlotCount: 3`) — and, unlike other
 unset values here, these weren't even marked "open". First-pass proposed
 defaults now used (all pending real playtesting):
 - `grill`, `fryer`, `dessert_station`: `Capacity = 2`; `cold_prep`:
   `Capacity = 1`
 - `SpeedMultiplier = 1.0` for every station type
-- `HeatLamp.QualityDecayRatePerTick = 1.0`
+- `HeatLamp.QualityDecayRatePerSecond = 1.0`
 
 **Passive pickup fixtures:**
 - 1× `Freezer` — placed adjacent to `cold_prep` (drinks/cold items
@@ -101,7 +106,7 @@ defaults now used (all pending real playtesting):
   real destination from day one rather than retrofitting one later.
 
 **Heat lamp:**
-- 1× `HeatLamp`, `SlotCount: 3`, `QualityDecayRatePerTick: 1.0` (first-pass — see above)
+- 1× `HeatLamp`, `SlotCount: 3`, `QualityDecayRatePerSecond: 1.0` (first-pass — see above)
 
 **Bathrooms — added in concurrency-sweep session:**
 - 1× `Bathroom` (Male), door position TBD at actual layout-authoring time
@@ -113,11 +118,17 @@ defaults now used (all pending real playtesting):
   (entity doc §24, new — coherence-check pass) values are open, pending
   playtesting (see mechanics doc §12–13) — not guessed here.
 
-**Coordinates — not authored in this doc.** This section describes counts
-and rough placement only ("adjacent to `cold_prep`", "door position TBD").
-The actual table positions and bathroom door positions were first authored in
-the implementation phase as first-pass content in the `default_diner_layout`
-JSON; they aren't specified here.
+**Coordinates — first-pass values (backported).** Authored in C# seeds
+(`DefaultDinerLayoutSeed.cs`, `DefaultDinerKitchenLayoutSeed.cs`), not yet
+JSON files. The first seeds overlapped (kitchen stations sat in the same cells
+as tables, freezer at (2,1)); fixed by giving the kitchen its own band and
+leaving row y = 3 as a walkway:
+- Dining tables (each is also that table's `HomePosition`, entities §3):
+  T1 (0,0), T2 (2,0), T5 (4,0); T3 (0,2), T4 (2,2), T6 (4,2).
+- Kitchen: grill (0,4), fryer (1,4), cold_prep (2,4), dessert_station (3,4),
+  heat lamp (4,4), freezer (2,5) (adjacent to cold_prep).
+- Bathrooms: x = 10, y = 0–2 (door tiles).
+- The delivery-leg pass point (mechanics doc §16) is still undefined.
 
 **Flagged for future (not built, not placed — allow for it, don't build it):**
 - A soda-fountain-style drink dispenser ("pressure drinks," e.g. draft
@@ -133,7 +144,7 @@ JSON; they aren't specified here.
 
 ## Staff Roster Seed
 
-Sized for 6 tables / 5 clusters / max 12 covers.
+Sized for 6 tables / 6 clusters / max 12 covers.
 
 | Role | Count |
 |---|---|
@@ -153,7 +164,7 @@ are assigned `["lunch", "dinner"]` (both of `default_diner`'s
 to meaningfully split into separate lunch-only/dinner-only shifts. **Given
 the corrected shift-span behavior (entity doc §6/§24a):** this means one
 continuous 12:00–00:00 shift with no `Fatigue` reset during the
-15:00–19:00 gap — Duarte's explicit design ("working non-stop, ignoring
+15:00–19:00 gap — the owner's explicit design ("working non-stop, ignoring
 the breaks"), not an unintended side effect. A larger roster splitting
 shifts per period is a natural post-MVP tuning change, not a structural
 one — the field already supports it.
@@ -177,7 +188,7 @@ researched against real menus.
 
 ### Beverages (Drinks phase)
 
-| Name | Category | Station/Pickup | PrepTimeSeconds | Price |
+| Name | Category | Station/Pickup | PrepTimeSeconds | DefaultPrice |
 |---|---|---|---|---|
 | Water | Adult | Freezer (pickup) | 2 | €1.50 |
 | Soda | Adult | Freezer (pickup) | 2 | €2.00 |
@@ -186,7 +197,7 @@ researched against real menus.
 
 ### Mains (EntryMain phase)
 
-| Name | Category | Station | PrepTimeSeconds | Price |
+| Name | Category | Station | PrepTimeSeconds | DefaultPrice |
 |---|---|---|---|---|
 | Grilled Steak | Adult | grill | 14 | €12.50 |
 | Grilled Chicken | Adult | grill | 12 | €10.00 |
@@ -200,7 +211,7 @@ researched against real menus.
 
 ### Desserts (Dessert phase)
 
-| Name | Category | Station | PrepTimeSeconds | Price |
+| Name | Category | Station | PrepTimeSeconds | DefaultPrice |
 |---|---|---|---|---|
 | Custard Tart | Adult | dessert_station | 3 | €2.00 |
 | Chocolate Mousse | Adult | dessert_station | 4 | €3.50 |
@@ -234,7 +245,7 @@ left open pending real playtesting rather than guessed:
 
 - `PatienceDecayBaseline` (Phase 4 of the build order) — now wired into the
   Mood decay formula (mechanics doc §2); defaults to `1.0` if left unset
-- `BaseFatigueAccrualRate`, `OvertimeFatigueMultiplier` (Phase 5 of the
+- `BaseFatigueAccrualPerSecond`, `OvertimeFatigueMultiplier` (Phase 5 of the
   build order) — staff Fatigue accrual, previously had no formula at all
   (mechanics doc §13a) — **first-pass defaults now set; ⚠ unit discrepancy
   flagged there**
@@ -261,11 +272,17 @@ left open pending real playtesting rather than guessed:
 - `Bathroom.Capacity`, starting `CleanlinessScore`, `MaxConcurrentCleaners`
   per bathroom instance (this file, Table Layout section above)
 - `KitchenStationType.Capacity`/`SpeedMultiplier` per station type and
-  `HeatLamp.QualityDecayRatePerTick` — first-pass defaults set (Layout
+  `HeatLamp.QualityDecayRatePerSecond` — first-pass defaults set (Layout
   section above); previously missing entirely, not even marked open
 - `ReinformMoodPenalty` — first-pass default `3` (mechanics doc §2/§10)
 - `QueueAbandonmentMoodThreshold` — nullable, defaults to `15` if unset
   (mechanics doc §2)
+- `BaseArrivalIntervalSeconds` — `15` is a **proposal**, not yet confirmed
+  (replaces the `120` seed value; see the row above)
+- `TableMoveSecondsPerCell`, `OversizedPartyReputationPenalty` — first-pass
+  defaults (`2`, `0`); `MaxMergeGapCells = 1` is the owner's "nearby only" call
+- `ServiceFlow` values — approved defaults live in code; the full draft is not
+  yet merged into the mechanics doc (§17)
 
 None of these block implementation starting — they're tunable constants,
 not structural gaps. Where a first-pass default is noted above it is

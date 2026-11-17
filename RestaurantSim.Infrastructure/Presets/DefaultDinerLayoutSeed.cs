@@ -3,10 +3,11 @@ using RestaurantSim.Domain.Floor;
 
 namespace RestaurantSim.Infrastructure.Presets;
 
-// Transcribes presets.md's "default_diner_layout" section — 6 physical tables
-// -> 5 TableClusters (4 standalone + 1 pre-merged 4-top), matching the doc's
-// stated "max capacity 12 covers" exactly. Reuses DefaultDinerKitchenLayoutSeed
-// for stations/heat lamp (built during the Kitchen phase) rather than
+// Transcribes presets.md's "default_diner_layout" section — 6 standalone 2-tops in two
+// rows of three (columns x = 0, 2, 4, one empty cell between neighbours), 6 TableClusters,
+// "max capacity 12 covers". Staff slide row-mates together at runtime when a bigger party
+// needs it (MaxMergeGapCells = 1 in DefaultDinerConfigSeed, mechanics doc §18); the empty
+// cells between the tables are what they slide into. Reuses DefaultDinerKitchenLayoutSeed// for stations/heat lamp (built during the Kitchen phase) rather than
 // duplicating that data. Bathroom door positions and Capacity/CleanlinessScore/
 // MaxConcurrentCleaners were all explicitly left "TBD"/"open, pending
 // playtesting" in presets.md — first-pass proposed values here, not guesses
@@ -28,14 +29,14 @@ public static class DefaultDinerLayoutSeed
 
         var tables = new List<Table>
         {
+            // Seats face N/S, so the valid merge axis runs along X (entity doc §5's
+            // merge-axis rule): T1-T2-T5 form one lane, T3-T4-T6 the other.
             CreateTable(1, standard2Top, new GridPosition(0, 0), clusterId: 1),
             CreateTable(2, standard2Top, new GridPosition(2, 0), clusterId: 2),
             CreateTable(3, standard2Top, new GridPosition(0, 2), clusterId: 3),
             CreateTable(4, standard2Top, new GridPosition(2, 2), clusterId: 4),
-            // Pre-merged 4-top (presets.md) — seats face N/S, so the valid merge
-            // axis runs along X (entity doc §5's merge-axis rule); placed adjacent.
             CreateTable(5, standard2Top, new GridPosition(4, 0), clusterId: 5),
-            CreateTable(6, standard2Top, new GridPosition(5, 0), clusterId: 5)
+            CreateTable(6, standard2Top, new GridPosition(4, 2), clusterId: 6)
         };
 
         var clusters = new List<TableCluster>
@@ -44,7 +45,8 @@ public static class DefaultDinerLayoutSeed
             new() { ClusterId = 2, TableIds = new List<int> { 2 }, Capacity = 2 },
             new() { ClusterId = 3, TableIds = new List<int> { 3 }, Capacity = 2 },
             new() { ClusterId = 4, TableIds = new List<int> { 4 }, Capacity = 2 },
-            new() { ClusterId = 5, TableIds = new List<int> { 5, 6 }, Capacity = 4 }
+            new() { ClusterId = 5, TableIds = new List<int> { 5 }, Capacity = 2 },
+            new() { ClusterId = 6, TableIds = new List<int> { 6 }, Capacity = 2 }
         };
 
         var stationTypes = DefaultDinerKitchenLayoutSeed.CreateStationTypes();

@@ -19,8 +19,8 @@ public sealed class ClustersMergedNotificationHandler : INotificationHandler<Clu
     public Task Handle(ClustersMerged notification, CancellationToken cancellationToken)
     {
         var dto = new ClustersMergedDto(
-            notification.ClusterId, notification.MergedClusterIds, notification.TableIds,
-            notification.Capacity, notification.Tick);
+            notification.ClusterId, notification.MergedClusterIds, notification.TableIds, notification.Capacity,
+            TableMoveMapping.ToDtos(notification.Moves), notification.DurationTicks, notification.Tick);
 
         return _hubContext.Clients
             .Group(notification.RestaurantId.ToString())

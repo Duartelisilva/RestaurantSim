@@ -12,6 +12,7 @@ public static class ClientEventNames
     public const string GroupDiningStageChanged = "GroupDiningStageChanged";
     public const string ClustersMerged = "ClustersMerged";
     public const string ClusterSplit = "ClusterSplit";
+    public const string TableMoveCompleted = "TableMoveCompleted";
     public const string GroupLeft = "GroupLeft";
     public const string TableCleaned = "TableCleaned";
     public const string BillPaid = "BillPaid";

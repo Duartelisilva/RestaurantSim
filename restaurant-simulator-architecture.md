@@ -16,13 +16,24 @@ Status legend: 🔒 Locked · 🚧 In progress · ⏳ Not yet discussed
 Separate `.csproj` per layer, referencing inward only:
 
 ```
-RestaurantSim.Domain          (no references — pure logic, entities, rules)
-RestaurantSim.Application     → Domain
+RestaurantSim.Domain          (no project references — pure logic, entities, rules)
+RestaurantSim.Contracts       (no references — wire DTOs shared with the client)
+RestaurantSim.Application     → Domain, Contracts
 RestaurantSim.Modules.*       → Domain, Application (public contracts only)
 RestaurantSim.AutoManager     → Domain, Application (public contracts only)
-RestaurantSim.Infrastructure  → Application, Domain
+RestaurantSim.Infrastructure  → Application, Domain, Contracts
 RestaurantSim.Api             → all of the above (composition root)
+RestaurantSim.Client          → Contracts (Blazor WASM; SignalR only)
+RestaurantSim.Client.Tests    → Client
 ```
+
+**Why `Application → Contracts` (added):** the snapshot query must map to DTOs
+*inside* the per-restaurant lock — mapping after release would be a torn read
+against the tick loop. `Contracts` is pure data with no dependencies, so no
+cycle is possible. `Infrastructure` also references `Contracts` (hub methods
+and event push send/receive Contracts types, never Domain types). Rejected
+alternative: an Application-owned read model mapped again in Infrastructure
+(duplicated shapes, no benefit).
 
 **Why separate projects, not folders in one project:** layering becomes a
 compile-time rule, not a convention. `Domain` physically cannot reference
@@ -47,12 +58,15 @@ player uses.
 allowed to know about every other project and wire them together
 (`Program.cs` registers Infrastructure implementations against
 Application/Domain interfaces, registers active modules per
-`RestaurantConfig.EventModuleIds`, registers AutoManager strategies).
+`RestaurantConfig.EventModuleIds`, registers AutoManager strategies). `AddMediatR` must scan **both** the Application assembly
+(handlers) and the Infrastructure assembly (SignalR notification handlers) —
+it originally scanned Application only, so no event was ever pushed to clients
+(found only on the first live run).
 Everything else depends only on abstractions.
 
 **Test projects mirror the layer split:** `RestaurantSim.Domain.Tests`,
 `.Application.Tests`, `.AutoManager.Tests`, etc. — not one combined test
-project. See §7.
+project. `RestaurantSim.Client.Tests` mirrors `Client` (`State/`, `Time/`). See §7.
 
 **Root namespace / solution name:** `RestaurantSim` (confirmed).
 
@@ -79,13 +93,21 @@ Fixed-tick model via a .NET `BackgroundService`:
   sequential pass immediately after — see §11 for the full concurrency
   model and why this ordering was chosen over running AutoManager as part
   of the tick itself.
-- `RestaurantConfig.MinutesPerTick` and `TicksPerRealSecond` are
-  independent knobs answering different questions: `MinutesPerTick` is how
-  much **in-game simulated time** one tick represents (drives the
-  restaurant's own clock/day-length); `TicksPerRealSecond` is how many
-  ticks execute per **real-world second** (drives engine/animation speed).
-  Neither implies the other — a restaurant can simulate "fast" in-game
-  time at a "slow" real-world tick rate or vice versa.
+- **Pace vs. resolution (revised — tick-rate independence pass).**
+  `RestaurantConfig.GameMinutesPerRealSecond` (`double`, authored; `default_diner`
+  = 1) is how fast in-game time passes per **real** second.
+  `MinutesPerTick` is no longer stored — it is derived,
+  `GameMinutesPerRealSecond / TicksPerRealSecond` (can be fractional).
+  `TicksPerRealSecond` is tick resolution/engine speed. Raising
+  `TicksPerRealSecond` therefore gives finer ticks without changing perceived
+  pace, and the old int-vs-0.25 `MinutesPerTick` contradiction is gone.
+  Durations are authored in seconds and per-tick rates *per real second*;
+  nothing is authored in ticks (mechanics doc §14).
+- **Pacing (built):** `SimulationTickService` paces each restaurant by its own
+  `TicksPerRealSecond` via `TickPacer`: the loop wakes every ~10 ms and ticks
+  each restaurant that is due (practical ceiling ≈ 60 ticks/s from OS timer
+  resolution). An overloaded host drops the backlog and slows down rather than
+  bursting ticks.
 
 ---
 
@@ -95,8 +117,7 @@ Resolves §2's previously-open gap: mechanics doc §7 defines *cadence*
 (what runs every tick vs. at throttled checkpoints) but never locked the
 *order* systems run in within a single tick. Fixed order, five steps:
 
-1. **Resolve scheduled completions for this tick** — kitchen
-   `Cooking → Ready`, movement arrivals, bathroom visit conclusions,
+1. **Resolve scheduled completions for this tick** — table-move completions (`AdvanceTableMovesCommand`, first), kitchen `Cooking → Ready`, dining progress (`AdvanceDiningCommand`: waiter visits, ordering, delivery, payment, leaving), movement arrivals, bathroom visit conclusions,
    `CustomerCall` stall re-escalation, Arrival's `NextArrivalTick` check,
    path-replan-on-stall.
 2. **Continuous per-tick accumulation** — Mood decay/recovery, staff
@@ -123,12 +144,9 @@ it arrived.
 AutoManager is unaffected by this ordering — it still runs as its own
 pass after the tick releases the lock (§11), outside all five steps above.
 **Implementation status — all five steps built (backported).**
-`RestaurantTickProcessor` dispatches, in order: `AdvanceKitchen` +
-`SpawnArrival` (step 1) → `AdvanceMood` + `AdvanceStaffShift` (step 2) →
+`RestaurantTickProcessor` dispatches, in order: `AdvanceTableMoves` → `AdvanceKitchen` → `AdvanceDining` → `SpawnArrival` (step 1) → `AdvanceMood` + `AdvanceStaffShift` (step 2) →
 `SpreadGroupMood` (step 3) → `ProcessQueueAbandonment` (step 4) →
-`EndDayCommand` (step 5), every tick, for every restaurant. Busser cleaning
-progress (`AdvanceCleaningProgressCommand`, mechanics doc §13) is the step 2
-item of that name. Step 3 applies to queued groups as well as seated ones
+`EndDayCommand` (step 5), every tick, for every restaurant. Busser cleaning progress (`AdvanceCleaningProgressCommand`, mechanics doc §13) is the step 2 item of that name (the implementation notes listed it with step 1's dispatch — **verify against `RestaurantTickProcessor`** and correct whichever side is wrong; status doc V-01). Step 3 applies to queued groups as well as seated ones
 (mechanics doc §4). Queue abandonment is fully self-contained — no
 inter-group spread (mechanics doc §2).
 
@@ -172,6 +190,59 @@ raises "this happened," and Infrastructure decides whether/how that
 becomes a network message. This also scales toward the offline/MAUI
 ambition (§6) — local state changes don't need a network layer to matter
 there.
+
+### 3.1 What is built — SignalR contract (backported from client/UI work)
+
+- **Contracts project:** wire DTOs (`Contracts/Snapshot`, `Contracts/Events`,
+  `Contracts/Hubs`), no references. Pushed events are Contracts DTOs, never the
+  raw Domain notification.
+- **Hub methods:** `CreateRestaurantAsync(configId)`, `JoinRestaurantAsync(id)`
+  (adds to group `RestaurantId.ToString()`, returns the snapshot),
+  `LeaveRestaurantAsync(id)`. Return type `HubResult<T>` (Contracts) — the wire
+  form of `Result<T>`; business failures travel as data, not `HubException`.
+  Method names keep the `Async` suffix (SignalR does not strip it); shared
+  constants in `RestaurantHubMethods` / `ClientEventNames`.
+- **Snapshot:** `GetRestaurantSnapshotQuery` (runs under the lock, §11) maps to
+  DTOs inside the lock. `ActiveGroupDto` carries `Stage` and `NextVisit`
+  (computed by the same `DiningStageCalculator` as the live event, so a late
+  joiner/reconnect matches the stream); `MinutesPerTick` is a `double`.
+- **Pushed events:** `GroupArrived`, `GroupTurnedAway` (with `Reason`:
+  `QueueFull` | `PartyTooLarge`), `GroupAbandonedQueue`, `GroupSeated`,
+  `GroupLeft`, `TableCleaned`, `BillPaid`, `GroupDiningStageChanged`
+  (`GroupDiningStageChangedDto(GroupId, Stage, NextVisit, Tick)`),
+  `ClustersMerged` (`ClustersMergedDto(ClusterId, MergedClusterIds, TableIds,
+  Capacity, Tick)`), `ClusterSplit` (`ClusterSplitDto(MergedClusterId,
+  Restored[], Tick)`) — merge/split carry the **resulting** topology
+  (idempotent); the table-move fields and `TableMoveCompleted` get wire DTOs in
+  the next slice. Infrastructure has one `*NotificationHandler` per event.
+  Not pushed (client shows "as at join"): staff state, `BathroomCleaned`,
+  `OrderPlaced`/kitchen events, `JokeTold`, `DayEnded`, Mood, seats/chairs.
+- **Principle — absolute values:** an event that changes a numeric value
+  (Cash, Reputation) carries the absolute value after the change, never a
+  delta, so the client sets state and a duplicated/replayed event cannot
+  double-apply.
+- **Join/event ordering rule:** `JoinRestaurantAsync` joins the group *before*
+  fetching the snapshot so no event falls in a gap. The client drops events
+  with `Tick < snapshot.SimulationTick` and applies equal-tick events
+  idempotently (set state, never toggle) — several commands run inside one
+  tick, so an equal tick may fall before or after the snapshot. Every pushed
+  DTO therefore carries `Tick`.
+- **Reconnect/resync rule:** SignalR's automatic reconnect gives the client a
+  new connection and drops its group membership; events pushed during the
+  outage are gone. On `Connected` after a drop the client rejoins and replaces
+  its store with the fresh snapshot, and rebuilds `GameClock` from it (built in
+  `EngineSession`, which depends only on `IEngineClient`; the transport raises
+  `ConnectionStateChanged`). After automatic retries are exhausted the UI offers
+  a manual Reconnect. Restaurants are in-memory, so after a server restart the
+  rejoin fails ("Restaurant … does not exist") — reload and start a new one.
+- **Wire names:** Contracts has no Domain reference, so `DiningStageNames`,
+  `DiningVisitNames`, `TurnedAwayReasonNames` hold the strings; tests pin them
+  to the Domain enum member names (a new member must be added to both).
+- **Dining progress** is pushed as one server-computed stage per group, not as
+  raw `OrderPlaced`/`OrderItemServed` events (decision recorded).
+- **Known, undecided:** restaurants are never ended or evicted — any client can
+  create unlimited restaurants through the hub, each ticking forever. Needs a
+  decision before the engine is exposed publicly.
 
 ---
 
@@ -252,6 +323,17 @@ in the business logic doc (§3), formalized as its own project.
   order) and `IWaiterActionStrategy` (jokes — one joke per pass per
   restaurant, not a drain; jokes are occasional flavor, not a queue to
   clear).
+- **`ITableLayoutStrategy` (built, step 18c)** — `DefaultTableLayoutStrategy`
+  under `AutoManager/Strategies/TableLayout/`. Consulted BEFORE
+  `ISeatingStrategy` on every step of the seating pass; follows the existing
+  **Seating** toggle (no new `AutoManagerSystem` member). Decision order:
+  (1) split a free runtime-merged cluster unless a queued party *needs* it
+  (party > largest original table of the group, and ≤ merged capacity);
+  (2) if anyone queued fits a free **or Moving** cluster as it is, do nothing
+  (seating goes first; a Moving cluster that fits blocks a second merge for the
+  same party); (3) otherwise merge the smallest touching/near free clusters
+  that fit the first party that fits nowhere (`MergeGeometry.For(floor)`,
+  mechanics doc §18). The seating pass is capped at 100 steps as a safety net.
 - **Not built, flagged:** reservation-based queue priority (business logic
   §1.1) — nothing creates a `Reservation` or routes one into the queue yet;
   and `IKitchenSyncStrategy` — MES v1 logic sits inline in
@@ -337,6 +419,17 @@ IEventResolutionStrategy (Domain, public contract):
   - *Blazor WASM* — single language throughout (depth in C# rather than
     split effort), real path to PC/mobile via MAUI Hybrid, still ships as
     a normal browser-shareable, portfolio-linkable web app today.
+- **Engine abstraction — built:** the client talks to the engine only through
+  `IEngineClient` (`SignalREngineClient` today), keeping the client-sim vs
+  server-hosted decision for Android open. `RestaurantStore` holds client state
+  as pure, unit-tested logic; `EngineSession` owns join/reconnect/resync (§3.1).
+  **UI (first pass, easy to change):** a table is coloured by dining stage
+  (`.stage-ordering|waitingforfood|eating|paying|leaving` in app.css) with an
+  SVG `<title>` tooltip (e.g. "Group 7 — waiting for food"); no extra text on
+  the table (a table is only ~80px wide on screen). All wording lives in
+  `Client/Components/DiningLabels.cs`; the session log gets a line per stage
+  change. Client-side movement interpolation (mechanics doc §8) is still the
+  plan and `RestaurantStore` does not block it.
 - **Known tradeoff, accepted:** Blazor WASM has a real download-size/
   cold-start cost (ships the .NET runtime to the browser). Not
   disqualifying for a management sim not aimed at scale/strangers.
@@ -346,7 +439,7 @@ IEventResolutionStrategy (Domain, public contract):
   ~$137,000, with industry commentary expecting continued growth into
   2026 as teams consolidate on single-language C# stacks. Portfolio
   framing should lead with "full-stack C#/.NET," with Blazor as evidence
-  within that, not as a Blazor-specific job search.
+  within that, not as a Blazor-specific job search. *(The salary and growth figures above come from an earlier research pass and are dated — re-verify before using them in any portfolio material.)*
 
 ### 6.2 Long-term ambition (post-DLC tier — informs constraints now, not built yet)
 
@@ -354,7 +447,9 @@ Explicitly **not MVP scope**, and only pursued after MVP + all DLC systems
 are complete:
 
 - Native PC and Android builds via **.NET MAUI Blazor Hybrid**, reusing
-  the same components and engine.
+  the same components and engine. An in-process `IEngineClient` implementation (engine hosted in the
+  app, no SignalR) would live in a separate host project referencing
+  Application/Infrastructure; the `Client` project stays Contracts-only.
 - **Accounts + login**, to support save persistence across devices.
 - **Cloud-synced saves**, with **offline-first play** as a hard
   requirement — full gameplay while disconnected, opportunistic
@@ -391,7 +486,7 @@ No auth scheme, save-format versioning, or sync provider is designed yet
   e.g. `IRestaurantRepository`, when testing handlers in isolation).
 - **Assertions:** FluentAssertions.
 - **Project structure:** mirrors the layer split (§1) — one test project
-  per source project, not one combined test project.
+  per source project, not one combined test project. `Client.Tests` covers `RestaurantStore` / `GameClock` / `EngineSession` as pure logic (no browser, no SignalR).
 
 **Coverage priority (qualitative, no hard percentage target — a fixed
 coverage number tends to produce busywork tests, which cuts against
@@ -526,6 +621,10 @@ restaurant. Remaining, optional: the `IKitchenSyncStrategy` extraction.
 **Phase 7 — Frontend (Blazor WASM).** Can start in parallel with Phase
 4–5 once SignalR events exist to consume — optional parallelization, not
 a hard sequence dependency.
+*Status (backported):* Blazor client scaffolded; snapshot + pushed events (§3.1)
++ floor view (rectangles) with dining-stage colouring built; merge/split client
+slice in progress. Not built: staff, cash/reputation display, bathroom events,
+seats/chairs, Mood display, movement.
 
 *Departure choreography note (not a backend logic item — logged so it isn't
 lost):* the payer stands, pays, and returns to sit — unless they're the last
@@ -587,6 +686,28 @@ keeps this low-risk in practice. No fairness mechanism is designed or
 planned for MVP — revisit only if playtesting surfaces actual input lag
 under heavy automation.
 
+**Implementation notes (backported).**
+- **Queries lock too:** state-reading queries implement
+  `IRestaurantScopedRequest` and go through `RestaurantLockBehavior`
+  (`GetRestaurantSnapshotQuery`) — the only reader today.
+- **Nested handlers:** a tick command acting through other commands
+  (`AdvanceDiningCommand`) calls their handlers **directly** while holding the
+  lock, never via `ISender` — the `SemaphoreSlim(1,1)` is not re-entrant, so a
+  nested send deadlocks. Safe because those handlers re-validate their own
+  preconditions; only FluentValidation is bypassed.
+- **Publish after save:** `AdvanceDiningCommandHandler` publishes its stage
+  events after its single `SaveAsync`, inside the lock. Nested handlers still
+  publish their own events during the pass, before the save (pre-existing).
+- **Notification `SendAsync` is awaited inside the command handler, i.e. while
+  the lock is held** — a slow client could delay the lock. Accepted for now.
+- **Lock dictionary growth:** the per-restaurant `ConcurrentDictionary` of
+  semaphores never shrinks; it is tied to the "restaurants are never ended or
+  evicted" issue (§3.1) and should be cleaned up together with it.
+- **Known deviation (deferred):** `RestaurantTickProcessor` increments
+  `SimulationTick` and updates `DailyStats` *outside* the lock. Proposed fix:
+  `AdvanceTickCommand` (`IRestaurantScopedRequest`). Deferred — nothing mutates
+  a restaurant concurrently yet; revisit when manual commands exist.
+
 **Cross-cutting convention — "check all, then commit all."** Applies
 anywhere a command reserves more than one resource, or overrides an
 in-progress task/reservation:
@@ -617,6 +738,10 @@ shape by default, not just the three cases above.
    `restaurant-simulator-presets.md`.
 5. Implementation is underway — Phases 0–6 of the Build Order (§10) are
    built per the implementation-phase log (Phase 6's optional
-   `IKitchenSyncStrategy` extraction remains). Phases 7–8 are not recorded
-   here. Implementation-phase decisions have been backported into this
+   `IKitchenSyncStrategy` extraction remains). Phase 7 (Blazor client) is partially built — see §10; Phase 8 is not recorded here. Implementation-phase decisions have been backported into this
    doc set; see the mechanics doc's §16 for what changed.
+6. **Open / undecided:** restaurants are never ended or evicted (§3.1);
+   MediatR 13+ commercial-license notice needs a license or a pin before any
+   public release; Android client-sim vs server-hosted engine; the
+   tick-increment lock deviation (§11, deferred); the staff Fatigue unit
+   question (mechanics doc §13a).

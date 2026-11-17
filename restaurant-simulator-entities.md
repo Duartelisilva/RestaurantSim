@@ -34,7 +34,11 @@ Status legend: 🔒 Locked · 🚧 In progress · ⏳ Not yet discussed
 22. 🔒 RestaurantConfig
 23. 🔒 StatisticsSnapshot
 24. 🔒 Bathroom (added in concurrency-sweep session)
-24a. 🔒 MealPeriodDefinition (added in coherence-check pass)
+24a. 🔒 MealPeriodDefinition
+24b. 🚧 SeasonDefinition (proposed — preset data)
+25. 🚧 ServiceFlowConfig (nested config record)
+26. 🔒 DiningVisit / DiningStage (enums; stage derived)
+27. 🔒 TableMove (value type carried on merge/split events)
 
 ---
 
@@ -49,7 +53,7 @@ This is the kind of reuse the project's "generalizable engine" goal calls for.
 |---|---|---|
 | `Position` | `GridPosition (int X, int Y)` | Integer grid cell, not continuous coordinates — MVP has no free placement; grid-cell math also drives adjacency checks for merging and future DLC collision checks |
 | `Hitbox` | `GridBounds (Width, Height in cells)` | Bounding-box footprint on the grid. **All current MVP entities** (`Table`, `KitchenStation`, `HeatLamp`, `Freezer`, `Bathroom`) are plain rectangles and are fully described by this alone |
-| `OccupiedCells` | `IReadOnlyList<GridPosition>?` | **Added — DLC-extensibility pass.** Null for every current entity (default; means "fully solid rectangle per `Hitbox`"). When a future DLC object needs a non-rectangular footprint (L-shaped counter, corner booth, etc.), it supplies the exact set of occupied cells relative to `Position` here instead — the bounding `Hitbox` on that object then just describes the smallest rectangle containing those cells, for quick coarse checks, while `OccupiedCells` is authoritative for actual collision |
+| `OccupiedCells` | `IReadOnlyList<GridPosition>?` | Null for every current entity (default; means "fully solid rectangle per `Hitbox`"). When a future DLC object needs a non-rectangular footprint (L-shaped counter, corner booth, etc.), it supplies the exact set of occupied cells relative to `Position` here instead — the bounding `Hitbox` on that object then just describes the smallest rectangle containing those cells, for quick coarse checks, while `OccupiedCells` is authoritative for actual collision |
 
 **Collision/pathfinding consumers must resolve footprint as:**
 `OccupiedCells ?? all cells within Hitbox` — a single fallback rule, checked
@@ -81,19 +85,23 @@ round 8-top) are added as new preset entries, zero new code.
 
 ## 3. Table (physical furniture)
 
-**Fulfills:** Fixed position/seat count for MVP (per your instruction), reusable
+**Fulfills:** Fixed seat count for MVP (position is mutable only through table movement, mechanics doc §18), reusable
 placement contract, dynamic-section support (see TableCluster below), and the
 doc's §2 grid/hitbox placement pattern applied consistently across the game.
 
 | Field | Type | Notes |
 |---|---|---|
 | `TableId` | `int` | Small fixed set, array-indexable, cheaper than Guid for hot-path lookups |
-| `Position`, `Hitbox` | via `IPlaceable` | Fixed for MVP (no player rearranging); DLC move-mode will only ever touch these two fields, nothing downstream |
+| `Position`, `Hitbox` | via `IPlaceable` | **Revised — table-movement decision (mechanics doc §18):** `Position` is the CURRENT position, no longer fixed — staff slide tables together for a merge and back on split. `Hitbox` unchanged. Free player placement (DLC move-mode) remains out of scope |
 | `Shape` | `TableShape` (ref) | Drives seat count/layout/merge eligibility — always `standard_2top` in MVP |
 | `Seats` | `IReadOnlyList<Seat>` | Generated from `Shape.SeatDefinitions`, always 2 in MVP |
 | `ClusterId` | `int?` | Which `TableCluster` this table currently belongs to; null if standalone. Bidirectional reference (cluster also lists its `TableIds`) — chosen over one-directional because seating/bussing logic needs fast "what cluster is this table part of" lookups constantly; sync risk is contained since only merge/split commands ever write it |
-| `IsClean` | `bool` | **Added in concurrency-sweep session.** Cleanliness lives on the individual table, not the cluster — a merged cluster's tables can be dirty independently, and a clean table can be split off and used/merged separately from a still-dirty one. `TableCluster.State` is derived from this (see TableCluster below), not the other way around. Set to `false` when a group leaves an occupied table; Busser cleaning progresses this per-tick (see mechanics doc §13) and flips it to `true` on completion |
-| `CleaningProgress` | `float (0–100)` | **Added — implementation-phase backport.** `IsClean` alone (a bool) had nowhere to store the 0–100 progress value mechanics doc §13's formula produces. Lives on the individual `Table` (same reasoning as `IsClean`), so interruption/resume continues from saved progress regardless of which Busser resumes. `IsClean` flips to `true` at `≥ 100` |
+| `IsClean` | `bool` | Cleanliness lives on the individual table, not the cluster — a merged cluster's tables can be dirty independently, and a clean table can be split off and used/merged separately from a still-dirty one. `TableCluster.State` is derived from this (see TableCluster below), not the other way around. Set to `false` when a group leaves an occupied table; Busser cleaning progresses this per-tick (see mechanics doc §13) and flips it to `true` on completion |
+| `CleaningProgress` | `float (0–100)` | `IsClean` alone (a bool) had nowhere to store the 0–100 progress value mechanics doc §13's formula produces. Lives on the individual `Table` (same reasoning as `IsClean`), so interruption/resume continues from saved progress regardless of which Busser resumes. `IsClean` flips to `true` at `≥ 100` |
+| `HomePosition` | `GridPosition` | Layout default; split restores it. Exposed non-nullable but not `required`: it is the FIRST value `Position` was given (layout load), or an explicit init; later `Position` changes never touch it (chosen over `required` to avoid editing every `new Table` — 12 sites) |
+| `MoveFrom` | `GridPosition?` | Where the table is sliding from; null = not moving |
+| `MoveEndTick` | `long?` | Tick the slide completes; null = not moving. The LOGICAL `Position` flips at command time (merge rules, anchors and blocked cells see the final layout); these two fields only mark the slide |
+| `IsMoving` | `bool` (derived: `MoveEndTick != null`) | Not stored |
 
 Note: **no `Section` field.** Section is not a property of furniture — see
 TableCluster, where it's derived dynamically from waiter assignment.
@@ -103,7 +111,7 @@ TableCluster, where it's derived dynamically from waiter assignment.
 ## 4. Seat
 
 **Fulfills:** Per-customer food delivery accuracy (the "does the right person
-get their order" fix), realistic chair-facing per your description, and the
+get their order" fix), realistic chair-facing, and the
 merge-axis rule that keeps merged tables geometrically valid without needing
 to hide/remove chairs.
 
@@ -129,27 +137,40 @@ furniture (`Table`) was split from the occupiable seating unit, the doc's
 `Table.Status` (Free/Reserved/Occupied/NeedsCleaning) properly belongs here.
 
 **Fulfills:** doc §1.3 status vocabulary exactly, dynamic section/waiter
-balancing per your description, auto-dissolve-on-clean flow already agreed,
-same-section-only merge safety (see rule below).
+balancing, auto-dissolve-on-clean flow already agreed,
+~~same-section-only merge safety~~ (**superseded** — merging ignores sections; see mechanics doc §18).
 
 | Field | Type | Notes |
 |---|---|---|
 | `ClusterId` | `int` | Identity |
 | `TableIds` | `IReadOnlyList<int>` | 1 (standalone) to N (merged) physical tables |
 | `Capacity` | `int` | Sum of member seats — always even in MVP (2, 4, 6) |
-| `State` | `enum: Free, Reserved, Occupied, NeedsCleaning` (derived, not stored) | **Changed in concurrency-sweep session — was stored, now computed.** Priority order: `NeedsCleaning` if any member `Table.IsClean == false`; else `Occupied` if `OccupiedBy != null`; else `Reserved` if an active `Reservation` currently holds this cluster (see Reservation §20 for the exact query — no stored backlink, derived same as `IsMerged`); else `Free`. Same derivation pattern as `IsMerged` below — avoids a second source of truth now that cleanliness lives per-`Table` |
+| `State` | `enum: Moving, NeedsCleaning, Occupied, Reserved, Free` (derived, not stored) | **Changed in concurrency-sweep session — was stored, now computed.** Priority order (**revised — table movement:** `Moving` added at the top): `Moving` if any member `Table.MoveEndTick != null` (a Moving cluster is never free — no seating, merge or split; `CanSeat`/free checks exclude it automatically); else `NeedsCleaning` if any member `Table.IsClean == false`; else `Occupied` if `OccupiedBy != null`; else `Reserved` if an active `Reservation` currently holds this cluster (see Reservation §20 for the exact query — no stored backlink, derived same as `IsMerged`); else `Free`. Same derivation pattern as `IsMerged` below — avoids a second source of truth now that cleanliness lives per-`Table` |
 | `OccupiedBy` | `GroupId?` | Currently seated group, null otherwise |
 | `AssignedWaiterId` | `StaffId?` | Replaces the static `Section` idea — a cluster's serving waiter, not a fixed geographic zone |
 | `ManuallyAssigned` | `bool` | If true, the auto section-balancing algorithm won't overwrite `AssignedWaiterId` on its next recompute — preserves player overrides |
 | `AnchorPosition` | `GridPosition` (derived, e.g. lowest `TableId`'s position) | For staff pathfinding only — not authoritative state, just a convenience reference point. No table is "promoted" to primary; the cluster is its own identity |
 | `IsMerged` | `bool` (derived: `TableIds.Count > 1`) | Not stored, to avoid a second source of truth |
-| `RecentJokeCount` | `int` | **Added in concurrency-sweep session.** Tracks jokes told at this table this visit (player or AutoManager) — feeds `JokeFatigueMultiplier` (mechanics doc §11). Resets to 0 when `State` transitions `NeedsCleaning → Free` (fatigue is within-visit, not persistent across parties). **Clarified — implementation-phase backport:** for a merged cluster this fires only once **every** member `Table` is clean (`State` derives to `Free`), not on the first table to finish; wired into the cleaning-progress handler |
-| `LastJokeTick` | `long` | **Added in concurrency-sweep session.** Set on every joke told at this table. Feeds only the AutoManager autonomous-joke cooldown check — player-triggered jokes aren't blocked by it but still update it |
+| `RecentJokeCount` | `int` | Tracks jokes told at this table this visit (player or AutoManager) — feeds `JokeFatigueMultiplier` (mechanics doc §11). Resets to 0 when `State` transitions `NeedsCleaning → Free` (fatigue is within-visit, not persistent across parties). **Clarified — implementation-phase backport:** for a merged cluster this fires only once **every** member `Table` is clean (`State` derives to `Free`), not on the first table to finish; wired into the cleaning-progress handler |
+| `LastJokeTick` | `long` | Set on every joke told at this table. Feeds only the AutoManager autonomous-joke cooldown check — player-triggered jokes aren't blocked by it but still update it |
+| `MergedFrom` | the ORIGINAL clusters (flattened) | Set on a cluster created by a runtime merge; empty for clusters authored pre-merged in a layout (those are not split — that is their normal state). Split restores the original cluster ids, tables, waiter assignment and `ManuallyAssigned` |
 
 **Same-axis merge rule:** merging two tables is only valid along the axis
 perpendicular to shared seat orientation (see Seat above) — this both keeps
 seats non-overlapping and, incidentally, keeps a merged cluster's shape
 sensible for rendering.
+
+**Revised — table-movement decision (mechanics doc §18):** tables no longer
+need to already touch. They merge if they are in the same lane (row, for N/S
+seats), consecutive, within `MaxMergeGapCells` (default 1), seats-perpendicular
+axis, with the gap cells free of other furniture; staff physically slide them
+together (timed move) and a split slides them back to `HomePosition`. The merged
+cluster takes the lowest component cluster id (no new id counter) and its
+`AssignedWaiterId` is the least-loaded among the merged clusters' own waiters
+(fewest seated groups; ties → lowest id), falling back to least-loaded overall
+only when none has a waiter. **Not built:** splitting a partly-clean merged
+cluster to reuse its clean tables (a split currently needs the whole cluster
+Free).
 
 **Dynamic section/waiter balancing (not stored on the entity — a service):**
 A `SectionAssignmentService` recomputes `AssignedWaiterId` across all clusters
@@ -206,7 +227,7 @@ can cover Host seating tasks when Host is busy), fatigue/error mechanics.
 | `CurrentTaskType` | `TaskType (enum: SeatGroup, CleanTable, CleanBathroom, DeliverOrderItem, AcknowledgeCall, CookItem)?` | What this staff member is currently doing; `null` when `State == Idle`. See "No dedicated `Task` entity" below for why this is two inlined fields rather than a `TaskId` reference |
 | `CurrentTaskTargetId` | `int?` | The target this task acts on, interpreted per `CurrentTaskType` — a `TableId` for `CleanTable`, `BathroomId` for `CleanBathroom`, `OrderItemId` for `DeliverOrderItem`/`CookItem`, `CallId` for `AcknowledgeCall`, `GroupId` for `SeatGroup`. Always set together with `CurrentTaskType` (both null or both populated) |
 | `Stats` | `StaffStats` | See below |
-| `AssignedMealPeriods` | `IReadOnlyList<string>` | **Added — coherence-check pass.** Which periods (referencing `MealPeriodDefinition.MealPeriodId`, §24a) this staff member is rostered for; validated as a subset of `Restaurant`'s own `ActiveMealPeriods` at assignment/hire time |
+| `AssignedMealPeriods` | `IReadOnlyList<string>` | Which periods (referencing `MealPeriodDefinition.MealPeriodId`, §24a) this staff member is rostered for; validated as a subset of `Restaurant`'s own `ActiveMealPeriods` at assignment/hire time |
 
 **No dedicated `Task` entity.** Considered — `TaskId`/`TaskType` were
 referenced by name in earlier drafts of this doc without ever being
@@ -234,8 +255,7 @@ mechanics doc §10) genuinely needs a task to be a richer shared object,
 that's an additive extension at that point — not something to
 pre-design speculatively here.
 
-**No `AssignedStationId` field.** Considered, then dropped: you clarified a
-Cook can work any station, one at a time, with no permanent specialization
+**No `AssignedStationId` field.** Considered, then dropped: a Cook can work any station, one at a time, with no permanent specialization
 for now. Station assignment lives entirely on the current task (resolved
 via `CurrentTaskType`/`CurrentTaskTargetId` — a `CookItem` task's target
 `OrderItem.StationId` says which station), not the staff member — a Cook
@@ -273,7 +293,7 @@ or a Cook-only precision stat), no schema change required.
 | `Speed` | All roles — waiter service speed, cook prep speed, busser turnover speed |
 | `Fatigue` | All roles — rises over shift, decays on break/`Resting`, degrades `Speed`, worsens `ErrorRate` |
 | `ErrorRate` | Cook (wrong/undercooked items) — base value, worsened by current `Fatigue` |
-| `Charisma` | Waiter (soothing/joke/upsell/check-in rolls vs customer Mood), Host (handling agitated queued groups) |
+| `Charisma` | Waiter (soothing/joke/upsell/check-in success rolls — `P(success) = Charisma`, mechanics doc §11; customer Mood scales the *magnitude* only, never the chance), Host (handling agitated queued groups) |
 | `Experience` | All roles — seniority/level, no formula defined yet, left open per doc. **DLC concept, deferred (backported):** waiter plate-carrying capacity scales with a `Level` derived from `Experience`, and the owner can pay to send a staff member for flat XP ("school") as an alternative to organic gain (business logic §6). Recommended whenever this is built: keep `Experience` on the same 0.0–1.0 range as every other stat and derive `Level = floor(Experience × 10) + 1` as a display bucket rather than a second stat scale |
 | `Morale` | All roles — fed by accumulated tips (business logic §4), not customer-facing. Low `Morale` worsens `ErrorRate`/`Speed` and raises quit risk; exact formula open, pending playtesting (**added in coherence-check pass** — referenced by business logic §4 but previously undefined anywhere) |
 
@@ -302,8 +322,10 @@ flow settled earlier, bill-payer designation, kids-menu enforcement (via
 | `LifecycleState` | `enum: Arriving, Queued, Seated, Leaving` | Coarse state; once `Seated`, `CoursePhase` tracks finer progress. **Open ambiguity — flagged, implementation-phase:** this doc never defined what distinguishes `Arriving` from `Queued`. Working assumption used in code, **not confirmed**: `Arriving` = spawned, not yet evaluated for seating; `Queued` = evaluated and waiting in the real line. `Leaving` is set only by `PayBillCommand` — a paid group's departure; a mid-meal walkout without paying is a separate, unbuilt mechanic. Needs an explicit decision either way |
 | `ArrivalTick` | `long` | For queue-wait and stats |
 | `CoursePhase` | `enum: Seated, Drinks, EntryMain, Dessert, Bill, Done` | Table-wide — whole table always shares one phase, confirmed earlier |
-| `PhaseWaitState` | `enum: AutoVisitPending, Serving, AwaitingDecision, RecheckScheduled` | Drives auto-visit → not-ready → recheck/call-preempt timing. **Open gap — flagged, implementation-phase:** only the field's overall purpose is described; what each of the four values individually means is not defined anywhere. Not consumed by any built command yet, so not blocking, but it needs real per-value definitions before waiter-dispatch/auto-visit logic is built |
+| `PhaseWaitState` | `enum: AutoVisitPending, Serving, AwaitingDecision, RecheckScheduled` | Drives auto-visit → not-ready → recheck/call-preempt timing. **Open gap — flagged, implementation-phase:** only the field's overall purpose is described; what each of the four values individually means is not defined anywhere. **Update (service flow):** now consumed by `AdvanceDiningCommand`; per-value definitions belong to mechanics §17 (draft pending approval — not restated here). `AwaitingDecision` is never persisted: it is decided and resolved inside one call. Not consumed by any built command yet, so not blocking, but it needs real per-value definitions before waiter-dispatch/auto-visit logic is built |
 | `NextAutoVisitTick` | `long` | Recheck timer target, if no call preempts it first |
+| `NextVisit` | `DiningVisit` (`Drinks, Main, Refill, Dessert, Bill`) | What the next scheduled waiter visit is for |
+| `VisitAttempt` | `int` | Attempt counter for the current visit (recheck handling) |
 | `CurrentOrderId` | `int?` | Active `Order` for this group |
 | `PayerId` | `CustomerId?` | Designated bill payer — MVP: first adult member. Bill-splitting (DLC) reads existing `OrderItem.OwnerId` at payment time; no schema change needed for that extension |
 
@@ -319,6 +341,17 @@ to avoid a second source of truth.
 **Group Mood is derived**, not stored — computed as an average/spread over
 `Members[i].Mood` wherever needed (walkout checks, complaint escalation,
 inter-group spread rolls).
+
+**`DiningStage` is derived, never stored** — `Ordering | WaitingForFood | Eating
+| Paying | Leaving`, computed by `DiningStageCalculator.Calculate(group, order)`
+(Domain/CustomerService, pure; also `Calculate(Restaurant, CustomerGroup)`,
+which resolves the current order). First match wins: `LifecycleState == Leaving`
+→ `Leaving`; `PhaseWaitState != Serving` → `Paying` if `NextVisit == Bill`, else
+`Ordering` (AutoVisitPending, RecheckScheduled, AwaitingDecision); `Serving` →
+`WaitingForFood` if any order item is not `Served`, else `Eating`.
+**Precedence:** `Serving` must win over `NextVisit == Bill` — the dessert order
+already sets `NextVisit = Bill` while the dessert is still being cooked and
+eaten. Visible end to end (snapshot, `GroupDiningStageChanged`, client).
 
 ---
 
@@ -340,10 +373,10 @@ patience/spending/regular status.
 | `SusceptibilityToGroup` | `float` | Per-person pull toward group-average Mood (intra-group spread); adults/parents have stronger calming influence per doc's own example |
 | `SpendingTendency` | `enum: Budget, Normal, Generous` | **Moved from group to per-person.** Needed at this granularity since `OrderItem.OwnerId` already tracks individual orders — group-level spending had no per-person signal to actually drive from |
 | `IsRegular` | `bool` | **Moved from group to per-person.** One member (e.g. a parent) can be a regular while others in the group aren't |
-| `IsPresentAtTable` | `bool` | **Added in concurrency-sweep session.** True while seated at the table; false while away (bathroom, etc.). Gates joke resolution (mechanics doc §11), the group-presence requirement for group-wide calls (business logic §1.55), and intra-group Mood spread (mechanics doc §4) — absent members are excluded from all three. `Mood` is also frozen (no decay/recovery/spread) while `false` |
-| `Gender` | `enum: Male, Female` | **Added in concurrency-sweep session.** Routes which gendered `Bathroom` queue this customer joins (§12 of mechanics doc) |
+| `IsPresentAtTable` | `bool` | True while seated at the table; false while away (bathroom, etc.). Gates joke resolution (mechanics doc §11), the group-presence requirement for group-wide calls (business logic §1.55), and intra-group Mood spread (mechanics doc §4) — absent members are excluded from all three. `Mood` is also frozen (no decay/recovery/spread) while `false` |
+| `Gender` | `enum: Male, Female` | Routes which gendered `Bathroom` queue this customer joins (§12 of mechanics doc) |
 | `BathroomVisitCount` | `int` | **Revised — coherence-check pass, replaces `HasUsedBathroom: bool`.** Increments on each bathroom trip this visit; feeds the logarithmic decay in the go-to-bathroom roll (mechanics doc §12) instead of a hard once-per-visit cap |
-| `LastBathroomVisitEndTick` | `long?` | **Added — coherence-check pass.** Set when a bathroom visit concludes (on return to table); gates the per-visit cooldown before another trip is eligible (mechanics doc §12) |
+| `LastBathroomVisitEndTick` | `long?` | Set when a bathroom visit concludes (on return to table); gates the per-visit cooldown before another trip is eligible (mechanics doc §12) |
 
 **Call frequency, not a stored field — behavior note:** the likelihood of
 this customer initiating/repeating a `CustomerCall` scales inversely with
@@ -351,7 +384,7 @@ current `Mood` **only**. `PatienceLevel` already did its work upstream — it's
 a fixed trait governing how fast Mood itself moved to get here; using it
 again as a second input into the call-frequency roll would double-count the
 same trait. Mood is the single downstream signal to read. Computed each tick
-from existing fields, nothing new to store.
+from existing fields, nothing new to store. **⚠ Tick-rate dependence:** a per-tick re-call probability scales with `TicksPerRealSecond`; it should be a per-real-second rate (status doc D-05).
 
 ---
 
@@ -474,23 +507,29 @@ being `Ready` while another is still `Cooking`.
 | `OwnerId` | `CustomerId` | Enables exact per-person food routing via `Seat.OccupiedBy` |
 | `MenuItemId` | `int` | Ref to preset `MenuItem` |
 | `Phase` | `enum: Drinks, EntryMain, Dessert` | Which course batch this belongs to — ties the item to a `KitchenTicket` |
-| `PriceAtOrder` | `decimal` | Snapshot of `MenuItem.Price` at order time — protects revenue/stats integrity if the player changes prices mid-service |
+| `PriceAtOrder` | `decimal` | Snapshot of the item's current price at order time (`MenuItem.DefaultPrice`, or the restaurant's price override — where overrides are stored is undefined, status doc D-18) — protects revenue/stats integrity if the player changes prices mid-service |
 | `Status` | `enum: Queued, Cooking, HeldUnderLamp, Ready, Served` | Per-item kitchen progress |
 | `TicketId` | `int?` | Which `KitchenTicket` batch this item is scheduled under |
 | `StationId` | `int?` | Which `KitchenStation` it's cooking at, once `Status == Cooking` |
-| `HeldSinceTick` | `long?` | Set when `Status` becomes `HeldUnderLamp` — basis for computing `QualityAtServe` |
+| `HeldSinceTick` | `long?` | Set when `Status` becomes `HeldUnderLamp` — basis for computing `QualityAtServe`; the hold period ends at **pickup for delivery**, not arrival at the table (mechanics doc §10) |
 | `IsHighQuality` | `bool` | Rolled once at the `Cooking → Ready` transition (mechanics doc §10) — not stored until that point |
-| `CreatedAtTick` | `long` | **Added — implementation-phase backport.** When this item was created. `Order.CreatedAtTick` only reflects the first item ever added to the order, which is wrong for e.g. a later mid-meal drink refill on an existing order. Basis for the pickup-item fetch-time gate (`CreatedAtTick + PrepTicks`, mechanics doc §10) |
-| `CookingStartedAtTick` | `long?` | **Added — backport.** Set when `Status` becomes `Cooking`; the `EffectivePrepTicks` elapsed check is measured from here. The assigned cook is still looked up via `StaffMember.CurrentTaskType/CurrentTaskTargetId` (existing pattern), not a new `AssignedCookId` field |
-| `PlannedStartTick` | `long?` | **Added — backport.** Mechanics doc §10's `StartTick_i`, now stored and enforced: a station- and cook-available item still deliberately waits until its `PlannedStartTick` before starting. Computed at ticket submission (mechanics doc §10, "Course-sync before a cook is assigned") |
-| `HadFoodQualityEvent` | `bool` | **Added — backport.** Stores the result of the `FoodQualityEvent` roll (mechanics doc §10) so it can be consumed when `QualityAtServe` is computed at pickup-for-delivery, instead of being rolled and discarded |
+| `CreatedAtTick` | `long` | When this item was created. `Order.CreatedAtTick` only reflects the first item ever added to the order, which is wrong for e.g. a later mid-meal drink refill on an existing order. Basis for the pickup-item fetch-time gate (`CreatedAtTick + PrepTicks`, mechanics doc §10) |
+| `CookingStartedAtTick` | `long?` | Set when `Status` becomes `Cooking`; the `EffectivePrepTicks` elapsed check is measured from here. The assigned cook is still looked up via `StaffMember.CurrentTaskType/CurrentTaskTargetId` (existing pattern), not a new `AssignedCookId` field |
+| `PlannedStartTick` | `long?` | Mechanics doc §10's `StartTick_i`, now stored and enforced: a station- and cook-available item still deliberately waits until its `PlannedStartTick` before starting. Computed at ticket submission (mechanics doc §10, "Course-sync before a cook is assigned") |
+| `HadFoodQualityEvent` | `bool` | Stores the result of the `FoodQualityEvent` roll (mechanics doc §10) so it can be consumed when `QualityAtServe` is computed at pickup-for-delivery, instead of being rolled and discarded |
+| `ConsumedByTick` | `long?` | **Added — service flow (mechanics §17, draft pending approval).** Per-item eating-completion marker used by the dining flow; never leaves the server (not on the wire) |
 
 **Kids-menu enforcement** is command validation, not a field: `PlaceOrderCommand`
 rejects any `OrderItem` where `OwnerId` resolves to a `Customer` with
-`IsAdult == false` and `MenuItem.Category != Kids`.
+`IsAdult == false` and `MenuItem.Category != Kids`. **Revised — shared rule:** the course match, kids-menu rule
+and meal-period availability checks live in one Domain method,
+`MenuItemEligibility.IsOrderable`, called by both `PlaceOrderItemValidation` and
+`OrderGenerator`. Order generation adds its own rule on top: adults pick only
+from the Adult menu (the eligibility rule alone would let them order kids'
+items).
 
 **`QualityAtServe`** — computed at serve time from `HeldSinceTick` ×
-`HeatLamp.QualityDecayRatePerTick` (if held at all), not stored per-tick.
+`HeatLamp.QualityDecayRatePerSecond` (if held at all), not stored per-tick.
 Fed *by* the food-quality-event roll from doc §1.6 (via `IsHighQuality`/
 `FoodQualityEvent`, see below and mechanics doc §10) — not the reverse.
 
@@ -514,8 +553,8 @@ same table) that the kitchen schedules to finish together.
 | `ItemIds` | `IReadOnlyList<int>` | The `OrderItem`s in this batch |
 | `SubmittedAtTick` | `long` | When the phase was taken |
 | `TargetReadyTick` | `long` | Computed sync target — the scheduling algorithm's output (per-item start-time offsets, per doc §2's example). **Backport:** computed at ticket-submission time from nominal baseline stats since no cook is assigned yet (mechanics doc §10) |
-| `IsAsyncMode` | `bool` | **Added — implementation-phase backport.** Implements "once re-informed, every later item on this ticket serves immediately, no further hold-evaluation" (mechanics doc §10). Flipping it also applies the re-inform Mood penalty to present group members (`RestaurantConfig.ReinformMoodPenalty`, §22) |
-| `PlayerPrioritized` | `bool` | **Added — verification pass (coherence fix).** Default `false`, player-settable manual MES override. Already defined in mechanics doc §10 ("Player priority bump") but had never been added to this table. Not part of the pending-changes list |
+| `IsAsyncMode` | `bool` | Implements "once re-informed, every later item on this ticket serves immediately, no further hold-evaluation" (mechanics doc §10). Flipping it also applies the re-inform Mood penalty to present group members (`RestaurantConfig.ReinformMoodPenalty`, §22) |
+| `PlayerPrioritized` | `bool` | Default `false`, player-settable manual MES override. Already defined in mechanics doc §10 ("Player priority bump") but had never been added to this table. Not part of the pending-changes list |
 
 **No stored `State` field** — ticket-level status is derived from its items'
 statuses (e.g. "Ready" only once every `ItemId` is `Ready` or `HeldUnderLamp`,
@@ -546,7 +585,7 @@ preparation. Uses the shared `IPlaceable` contract, same as `Table`/
 | `Position`, `Hitbox` | via `IPlaceable` | MVP fixed layout, same as other kitchen equipment |
 | `SlotCount` | `int` | Total hold capacity |
 | `OccupiedSlots` | `IReadOnlyList<int>` (OrderItemIds) | What's currently being held; full when `Count >= SlotCount` |
-| `QualityDecayRatePerTick` | `float` | How fast held food loses quality — basis for `OrderItem.QualityAtServe` |
+| `QualityDecayRatePerSecond` | `float` (per real second — **renamed from `…PerTick`**; applied per tick as `rate / TicksPerRealSecond`) | How fast held food loses quality — basis for `OrderItem.QualityAtServe` |
 
 **Real constraint on the heat-lamp decision:** if the lamp is full, "hold
 under lamp" isn't available regardless of how short the delay is — forces
@@ -605,12 +644,12 @@ earlier decision to defer that DLC system without guessing its shape now.
 | `MenuItemId` | `int` | Identity |
 | `Name` | `string` | Display |
 | `Category` | `enum: Adult, Kids` | Doc §1.4 — kids items generally faster prep + lower price ceiling. Enforced at order time via `PlaceOrderCommand` |
-| `Course` | `enum: Drinks, EntryMain, Dessert` | Which phase this item belongs to — values match `CustomerGroup.CoursePhase`/`OrderItem.Phase` (§8, §13) directly, so ordering-window validation is a straight equality check, not a translation table |
+| `Course` | `enum: Drinks, EntryMain, Dessert` | Which phase this item belongs to — values match `CustomerGroup.CoursePhase`/`OrderItem.Phase` (§8, §13) directly, so ordering-window validation is a straight equality check, not a translation table. **Exception — mid-meal refill (business logic §1.4, mechanics §17):** `Drinks` items are orderable after the Drinks phase as their own single-item order, so the course check accepts `Drinks` in any later phase (verify `MenuItemEligibility.IsOrderable` implements this — status doc V-03) |
 | `RequiredStationType` | `string?` (ref to `KitchenStationType.StationTypeId`) | Nullable. `null` = not cooked at a station — picked up from a passive source instead (freezer, bar, pantry) |
 | `PickupSourceType` | `string?` | Set only when `RequiredStationType` is null — which passive source this comes from (e.g. `"freezer"`, `"bar"`, `"pantry"`). Preset-driven label, not a hardcoded string in logic |
 | `PrepTimeSeconds` | `float` | Base duration, authored in real-world seconds — cook time if station-prepped, fetch/pickup time if pickup-sourced. Converted to `PrepTicks` at load time via `TicksPerRealSecond` (mechanics doc §14), then modified by `KitchenStationType.SpeedMultiplier`/Cook `Speed` when applicable |
 | `DefaultPrice` | `decimal` | Doc §4 — player can override via restaurant pricing; this is the shipped default |
-| `AvailableMealPeriods` | `IReadOnlyList<string>` | **Added — coherence-check pass.** Which periods (referencing `MealPeriodDefinition.MealPeriodId`, §24a) this item can be ordered in. Enforced the same way as kids-menu enforcement — `PlaceOrderCommand` validation, not a runtime filter elsewhere. `default_diner`'s menu (presets doc) is available across both its active periods (`"lunch"`+`"dinner"`) uniformly for MVP — no per-item restriction until a period-specific item (e.g. a future breakfast dish) actually exists |
+| `AvailableMealPeriods` | `IReadOnlyList<string>` | Which periods (referencing `MealPeriodDefinition.MealPeriodId`, §24a) this item can be ordered in. Enforced the same way as kids-menu enforcement — `PlaceOrderCommand` validation, not a runtime filter elsewhere. `default_diner`'s menu (presets doc) is available across both its active periods (`"lunch"`+`"dinner"`) uniformly for MVP — no per-item restriction until a period-specific item (e.g. a future breakfast dish) actually exists |
 
 **No `RecipeId`/`IngredientRequirements`.** Still correctly excluded — when
 Inventory DLC (doc §6) is designed, it extends via a separate
@@ -665,20 +704,20 @@ independent-module goals.
 | `RestaurantId` | `Guid` | Identity, ties into per-session SignalR groups |
 | `ConfigId` | `string` | Ref to the `RestaurantConfig` preset this session started from |
 | `SimulationTick` | `long` | Authoritative clock |
-| `CurrentDayNumber` | `int` | **Added — coherence-check pass.** Increments on each `DayEnded` (mechanics doc §15). Feeds `StatisticsSnapshot`'s per-day framing and the future seasonality DLC's day-counting (business logic §6) |
+| `CurrentDayNumber` | `int` | Increments on each `DayEnded` (mechanics doc §15). Feeds `StatisticsSnapshot`'s per-day framing and the future seasonality DLC's day-counting (business logic §6) |
 | `Cash` | `decimal` | Doc §4 |
 | `Reputation` | `float (0–100)` | Doc §1.1/§4 — economic multiplier; raised/lowered by service quality, inspections, critics, complaints |
-| `Floor` | `FloorState` | `Tables`, `Clusters`, `KitchenStations`, `HeatLamps`, `Freezers`, `Bathrooms` — physical layout. **`Freezers` added — implementation-phase backport** (§18a). **`Bathrooms` added in concurrency-sweep session** (see new §24 entity below) |
+| `Floor` | `FloorState` | `Tables`, `Clusters`, `KitchenStations`, `HeatLamps`, `Freezers`, `Bathrooms` — physical layout. **`Freezers` added — implementation-phase backport** (§18a). **`Bathrooms` added in concurrency-sweep session** (see new §24 entity below). **`MaxMergeGapCells: int`** — added, table movement: 0 = touching only; copied from `RestaurantConfig.MaxMergeGapCells` by `CreateRestaurantCommand`. Deliberate deviation from "read config through the repository": the merge rules, the AutoManager's layout strategy (sync, aggregate-only) and the oversize check all need the same limit, and keeping it on the floor avoided changing the `ITableLayoutStrategy` signature and ~27 test call sites — revisit if it ever bites. (`TableMoveSecondsPerCell` stays config-only: only the merge/split handlers need it, and they load the config.) |
 | `StaffRoster` | `StaffRosterState` | `Staff` (same `IReadOnlyList<StaffMember>` as before, just relocated for cohesion) |
 | `CustomerService` | `CustomerServiceState` | `Queue`, `ActiveGroups`, `PendingCalls`, `Reservations` |
 | `KitchenOps` | `KitchenOpsState` | `ActiveOrders`, `ActiveTickets`, `NextTicketId: int` — **added, implementation-phase backport:** same monotonic-counter pattern as Order/OrderItem/Group/Customer IDs |
 | `Events` | `EventState` | `ActiveEvents`, `ComplaintLog` — `ComplaintLog` stays empty unless `ComplaintsBookModule` is active (entity doc §11, moved from core in coherence-check pass) |
-| `AutoManagerToggles` | `Dictionary<AutoManagerSystem, bool>` | **Added in concurrency-sweep session.** Per-system on/off state (seating, waiter-actions/jokes, Busser task-priority, etc.) — session-mutable, defaults all-on, persists across the session (not a `RestaurantConfig` preset value, since the player can flip it live). MES is deliberately **not** a toggleable entry — always automated regardless of this state; the player's only lever over MES is the per-ticket priority bump (mechanics doc §10). `AutoManagerSystem (enum: Seating, WaiterActions, TaskPriority)` — one member per toggleable strategy interface in architecture doc §5 (`ISeatingStrategy`, `IWaiterActionStrategy`, `IStaffTaskPriorityStrategy`); `IKitchenSyncStrategy`/MES excluded, per the rule stated in this same row |
+| `AutoManagerToggles` | `Dictionary<AutoManagerSystem, bool>` | Per-system on/off state (seating, waiter-actions/jokes, Busser task-priority, etc.) — session-mutable, defaults all-on, persists across the session (not a `RestaurantConfig` preset value, since the player can flip it live). MES is deliberately **not** a toggleable entry — always automated regardless of this state; the player's only lever over MES is the per-ticket priority bump (mechanics doc §10). `AutoManagerSystem (enum: Seating, WaiterActions, TaskPriority)` — one member per toggleable strategy interface in architecture doc §5 (`ISeatingStrategy`, `IWaiterActionStrategy`, `IStaffTaskPriorityStrategy`); `IKitchenSyncStrategy`/MES excluded, per the rule stated in this same row |
 
 **Sub-state groups are not new entities** — each is a thin wrapper bundling
 lists that already existed on the flat draft (e.g. `Floor.Tables` is the same
 `IReadOnlyList<Table>` as before). Purely a structural regrouping for
-cohesion and module-isolation, no new data introduced.
+cohesion and module-isolation, no new data introduced. One deliberate exception: `FloorState.MaxMergeGapCells`, a config value copied onto the floor.
 
 **`SnapshotHistory` deliberately excluded.** Per `ISnapshotStore`
 (architecture doc §7.5) — stats are written *out* to a store, not
@@ -853,44 +892,50 @@ JSON file, zero code.
 |---|---|---|
 | `ConfigId` | `string` | Preset key, e.g. `"default_diner"` |
 | `StartingCash` | `decimal` | |
-| `MinutesPerTick` | `int` | Sim-time scale, per Architecture chat |
+| `GameMinutesPerRealSecond` | `double` | **Replaces stored `MinutesPerTick` (tick-rate independence pass).** In-game minutes per REAL second (`default_diner` = 1). `MinutesPerTick` is now a derived, non-stored property `GameMinutesPerRealSecond / TicksPerRealSecond` (can be fractional); the snapshot DTO's `MinutesPerTick` is a `double` |
 | `TicksPerRealSecond` | `int` | Ticks executed per real-world second (mechanics doc §14) — every duration-bearing preset value below is authored in real-world seconds and converted to ticks via this value at load time |
 | `TableLayoutId` | `string` | Ref to a separate layout preset defining `Table`/`KitchenStation`/`HeatLamp` starting positions — kept out of this entity so layouts can be reused across multiple configs |
 | `StaffRosterSeed` | `IReadOnlyList<(StaffRole Role, int Count)>` | Fixed MVP starting roster |
 | `MenuItemIds` | `IReadOnlyList<int>` | Which `MenuItem` presets this restaurant offers — lets multiple restaurants share one global menu catalog while each exposing a different subset |
 | `ReputationStart` | `float` | |
 | `PatienceDecayBaseline` | `float` | Base tuning knob feeding per-customer `PatienceLevel` effects (doc §1.1) |
-| `BaseFatigueAccrualRate` | `float` | **Added — backported from implementation-phase decisions.** Per-tick `Fatigue` accrual while a staff member is not `OffShift` (mechanics doc §13a). First-pass default implemented from a stated intent ("reaches ~1.0 by end of a typical 12-hour shift") — **⚠ see the unit discrepancy flagged in mechanics doc §13a before trusting the number**; still pending playtesting |
-| `OvertimeFatigueMultiplier` | `float` | **Added — backported from implementation-phase decisions.** Multiplier on `BaseFatigueAccrualRate` while a staff member is held past their own `ShiftEnd` by the coverage rule (entity doc §6/§24a, mechanics doc §13a) — Fatigue rises faster under forced overtime, not slower. First-pass default `2.0` (confirmed: overtime is more tiring, not less); pending playtesting |
-| `QueueWaitMoodDecayRate` | `float` | **Added — coherence-check pass.** Base per-tick Mood decay while queued, default `-0.4` (mechanics doc §2) |
-| `CourseWaitMoodDecayRate` | `float` | **Added — coherence-check pass.** Base per-tick Mood decay while waiting on a course, default `-0.3` (mechanics doc §2) |
-| `NaturalMoodRecoveryRate` | `float` | **Added — coherence-check pass.** Base per-tick Mood recovery while seated/eating, default `+0.5` (mechanics doc §2) |
-| `ProbabilityCheckpointIntervalSeconds` | `float` | **Added — coherence-check pass.** Interval between probability-roll checkpoints (complaint, filing, inter-group spread), default 3 seconds, converted to ticks per §14 (mechanics doc §7) |
-| `PathReplanMaxWaitSeconds` | `float` | **Added — coherence-check pass.** Max wait before a stalled path triggers a full replan, default 5 seconds, converted to ticks per §14 (mechanics doc §9) |
-| `MaxCallAttempts` | `int` | **Added — coherence-check pass.** Cap on `CustomerCall.AttemptCount` (§10), default `3` |
-| `QueueAbandonmentMoodThreshold` | `float?` | **Added — implementation-phase backport.** A queued group whose average Mood falls below this abandons the queue (business logic §1.2). Nullable; defaults to `15` if unset (tied to the locked Mood tier table, mechanics doc §2: Very Low = 0–14) — same convention as `PatienceDecayBaseline`. The reputation penalty (flat `0.5` per abandonment) is deliberately a pure code constant for now, not a field — revisit if per-restaurant tuning is wanted |
-| `ActiveMealPeriods` | `IReadOnlyList<MealPeriodDefinition>` | **Added — coherence-check pass.** Which meal periods (§24a) this restaurant operates, with their hours. Gates Arrival spawning (business logic §1.1) and staff scheduling (§6, §24a) — no active period covering the current time means no arrivals and no staff clocked in |
+| `BaseFatigueAccrualPerSecond` | `float` | `Fatigue` accrual while a staff member is not `OffShift` (mechanics doc §13a). First-pass default implemented from a stated intent ("reaches ~1.0 by end of a typical 12-hour shift") — **⚠ see the unit discrepancy flagged in mechanics doc §13a before trusting the number**; still pending playtesting |
+| `OvertimeFatigueMultiplier` | `float` | Multiplier on `BaseFatigueAccrualPerSecond` while a staff member is held past their own `ShiftEnd` by the coverage rule (entity doc §6/§24a, mechanics doc §13a) — Fatigue rises faster under forced overtime, not slower. First-pass default `2.0` (confirmed: overtime is more tiring, not less); pending playtesting |
+| `QueueWaitMoodDecayPerSecond` | `float` | Base Mood decay while queued, default `-0.4` (mechanics doc §2) |
+| `CourseWaitMoodDecayPerSecond` | `float` | Base Mood decay while waiting on a course, default `-0.3` (mechanics doc §2) |
+| `NaturalMoodRecoveryPerSecond` | `float` | Base Mood recovery while seated/eating, default `+0.5` (mechanics doc §2) |
+| `ProbabilityCheckpointIntervalSeconds` | `float` | Interval between probability-roll checkpoints (complaint, filing, inter-group spread), default 3 seconds, converted to ticks per §14 (mechanics doc §7) |
+| `PathReplanMaxWaitSeconds` | `float` | Max wait before a stalled path triggers a full replan, default 5 seconds, converted to ticks per §14 (mechanics doc §9) |
+| `MaxCallAttempts` | `int` | Cap on `CustomerCall.AttemptCount` (§10), default `3` |
+| `QueueAbandonmentMoodThreshold` | `float?` | A queued group whose average Mood falls below this abandons the queue (business logic §1.2). Nullable; defaults to `15` if unset (tied to the locked Mood tier table, mechanics doc §2: Very Low = 0–14) — same convention as `PatienceDecayBaseline`. The reputation penalty (flat `0.5` per abandonment) is deliberately a pure code constant for now, not a field — revisit if per-restaurant tuning is wanted |
+| `ActiveMealPeriods` | `IReadOnlyList<MealPeriodDefinition>` | Which meal periods (§24a) this restaurant operates, with their hours. Gates Arrival spawning (business logic §1.1) and staff scheduling (§6, §24a) — no active period covering the current time means no arrivals and no staff clocked in |
 | `EventModuleIds` | `IReadOnlyList<string>` | Which `ISimulationModule`s are active for this restaurant — ties directly into the module-independence pattern from `RestaurantEvent`. Even *which DLC modules run* is per-restaurant data, not a global switch: one config can enable `FoodCriticModule`, another can omit it, with no code change either way |
 | `ShortDelayThresholdSeconds` | `float` (seconds) | Heat-lamp-vs-reinform base threshold before `WaitPressure` scaling, converted to `ShortDelayThresholdTicks` at load time (mechanics doc §10, §14) |
 | `MaxAcceptableWaitSeconds` | `float` (seconds) | Denominator for `WaitPressure` in the heat-lamp decision, converted to `MaxAcceptableWaitTicks` at load time (mechanics doc §10, §14) |
 | `BaseHighQualityChance` | `float` | Base coefficient in the `IsHighQuality` roll (mechanics doc §10) |
 | `BaseEventChance` | `float` | Base coefficient in the `FoodQualityEvent` roll (mechanics doc §10) |
 | `PlatingTimeSeconds` | `float` (seconds) | Flat cook→pass-point transfer time before an item is pickup-eligible, converted to `PlatingTicks` at load time (mechanics doc §10, §14) |
-| `ReinformMoodPenalty` | `float?` | **Added — implementation-phase backport.** Flat Mood penalty applied once to each present group member (`IsPresentAtTable == true`) when a `KitchenTicket` flips to async/re-inform mode (mechanics doc §2, §10). Nullable/open; first-pass default `3` — the low end of the existing waiter-action-failure range (`-3` to `-10`) |
+| `ReinformMoodPenalty` | `float?` | Flat Mood penalty applied once to each present group member (`IsPresentAtTable == true`) when a `KitchenTicket` flips to async/re-inform mode (mechanics doc §2, §10). Nullable/open; first-pass default `3` — the low end of the existing waiter-action-failure range (`-3` to `-10`) |
 | `TipBaseRate` | `float` | Base coefficient in the tip formula, default `50` (mechanics doc §6) |
 | `TipMoodExponent` | `float` | Exponent applied to `Mood/100` in the tip formula, default `0.75` (mechanics doc §6) |
 | `AutoJokeCooldownSeconds` | `float` | Per-table cooldown between autonomous AutoManager jokes (mechanics doc §11). First-pass default `60` (implementation phase; no doc-cited example existed) |
 | `MoodGapThreshold` | `float` | Mood-gap that triggers AutoManager to target one person vs. the whole table for a joke (mechanics doc §11). First-pass default `20` |
 | `FacilitiesTimeSecondsMale`, `FacilitiesTimeSecondsFemale` | `float` | Gendered `UseFacilities` sub-step duration (mechanics doc §12) |
-| `BaseBathroomVisitChance` | `float` | **Added — coherence-check pass.** Per-checkpoint base probability a present customer decides to go (mechanics doc §12). Open, pending playtesting |
-| `BathroomCooldownSeconds` | `float` | **Added — coherence-check pass.** Minimum time since a customer's last visit ended before they're eligible again, converted to ticks per §14 (mechanics doc §12). Open, pending playtesting |
-| `EatingMealtimeVisitModifier` | `float` | **Added — coherence-check pass.** Multiplier (< 1) applied to the visit-trigger chance while a customer is actively eating a served course, vs. the normal rate while waiting (mechanics doc §12). Open, pending playtesting |
+| `BaseBathroomVisitChance` | `float` | Per-checkpoint base probability a present customer decides to go (mechanics doc §12). Open, pending playtesting |
+| `BathroomCooldownSeconds` | `float` | Minimum time since a customer's last visit ended before they're eligible again, converted to ticks per §14 (mechanics doc §12). Open, pending playtesting |
+| `EatingMealtimeVisitModifier` | `float` | Multiplier (< 1) applied to the visit-trigger chance while a customer is actively eating a served course, vs. the normal rate while waiting (mechanics doc §12). Open, pending playtesting |
 | `WashHandsTimeSecondsMale`, `WashHandsTimeSecondsFemale` | `float` | Gendered `WashHands` sub-step duration (mechanics doc §12) |
 | `AlmostDirtyThreshold`, `DirtyThreshold` | `float` | Two-tier bathroom cleanliness thresholds (mechanics doc §12). First-pass defaults `60` and `30` — the shape matches §12's "lead time before it costs Mood" intent; values aren't derived from anything more specific |
 | `TableCleaningBaseSeconds` | `float` | Base Busser table-cleaning duration before speed/fatigue scaling (mechanics doc §13). First-pass default `60` |
 | `BathroomCleaningBaseSeconds` | `float` | Base Busser bathroom-cleaning duration before speed/fatigue scaling (mechanics doc §13). First-pass default `180` |
 | `ComplaintCategoryWeights` | `Dictionary<ComplaintCategory, float>` | Base severity weight per `ComplaintRecord.Category` (doc §11) — data-driven, tunable per restaurant type without touching code. Only meaningful if `ComplaintsBookModule` is active (§11) |
-| `InspectionDurationSeconds` | `float` | **Added — coherence-check pass, renamed from an earlier draft.** Authored duration of the Inspection grading/checklist pass, converted to `DurationTicks` on the event's `Data` payload at trigger time via §14. Open, pending playtesting — same treatment as `TableCleaningBaseSeconds`/`BathroomCleaningBaseSeconds`, no separate "max" needed unless a reason for variability is designed later |
+| `InspectionDurationSeconds` | `float` | Authored duration of the Inspection grading/checklist pass, converted to `DurationTicks` on the event's `Data` payload at trigger time via §14. Open, pending playtesting — same treatment as `TableCleaningBaseSeconds`/`BathroomCleaningBaseSeconds`, no separate "max" needed unless a reason for variability is designed later |
+| `PreOpeningLeadMinutes` | `int?` | Nullable, code default `30`: in-game minutes before Opening that a new restaurant starts at, clamped to the start of day (mechanics §15) |
+| `ServiceFlow` | `ServiceFlowConfig` | **Added — service flow (mechanics §17).** Nested record, not ~20 flat fields (CLAUDE.md principle 3, no god objects): timings in seconds (e.g. `SeatedToFirstVisitSeconds`), ready/refill/dessert chances, price bias, eating-duration ranges. Defaults = the approved values, so a preset that omits it simply gets them |
+| `OversizedPartyReputationPenalty` | `float` | Default `0`. Fraction of current reputation lost when a party larger than the layout's max party size is turned away at the door (same style as the queue-full penalty); a config value so it can be raised without code changes (mechanics §18) |
+| `MaxMergeGapCells` | `int?` | Max empty cells between two tables that can still be merged (null/0 = must already touch); `default_diner` = 1. Copied to `FloorState.MaxMergeGapCells` at creation (§19) |
+| `TableMoveSecondsPerCell` | `float?` | Seconds a table takes to slide one cell, converted per mechanics §14; nullable with code fallback `TableMoveTiming.DefaultSecondsPerCell` = 2 |
+| `BaseArrivalIntervalSeconds` | `float` | **Not previously in this table — added with the tuning finding below.** Base interval between arriving groups, in REAL seconds; at the default pace 1 real second = 1 in-game minute (see presets doc for the scale note) |
 
 ---
 
@@ -910,10 +955,10 @@ to avoid heap churn on something created every N ticks.
 | `AvgFinalMood` | `float` | Aggregate of `Customer.Mood` at payment across the period — the stats-facing view of an otherwise per-customer, ephemeral value |
 | `ComplaintCount` | `int` | From `ComplaintLog`, period total — `0` unless `ComplaintsBookModule` is active (entity doc §11) |
 | `ActiveEventTypes` | `IReadOnlyList<string>` | Which `RestaurantEvent`s were active during this window, by `EventType` string key |
-| `TotalGameplayDays` | `int` | **Added — coherence-check pass.** `Restaurant.CurrentDayNumber` (§19) captured at snapshot time — lets a stats view chart by actual day count rather than raw `Tick`, which drifts if `TicksPerRealSecond` ever changes (mechanics doc §14) |
-| `Costs` | `decimal` | **Added in coherence-check pass.** Period total of wages, cleaning fee, restock, maintenance, utilities, breakage/waste — needed for the locked-MVP day-end summary (business logic §4), previously unrepresented on this struct |
-| `NetProfit` | `decimal` (derived: `Revenue - Costs`) | **Added in coherence-check pass.** Not stored independently — computed from the two fields above at read time, same derivation pattern as `TableCluster.IsMerged` |
-| `ReputationDelta` | `float` | **Added in coherence-check pass.** Net reputation change over the period — required by business logic §4's day-end summary |
+| `TotalGameplayDays` | `int` | `Restaurant.CurrentDayNumber` (§19) captured at snapshot time — lets a stats view chart by actual day count rather than raw `Tick`, which drifts if `TicksPerRealSecond` ever changes (mechanics doc §14) |
+| `Costs` | `decimal` | Period total of wages, cleaning fee, restock, maintenance, utilities, breakage/waste — needed for the locked-MVP day-end summary (business logic §4), previously unrepresented on this struct |
+| `NetProfit` | `decimal` (derived: `Revenue - Costs`) | Not stored independently — computed from the two fields above at read time, same derivation pattern as `TableCluster.IsMerged` |
+| `ReputationDelta` | `float` | Net reputation change over the period — required by business logic §4's day-end summary |
 
 **Accumulation semantics (implementation-phase backport).** A statistics
 accumulator (`DailyStatsAccumulator`, fed by `BillPaid`/`GroupLeft` events and
@@ -966,7 +1011,7 @@ here.
 | `OccupiedBy` | `IReadOnlyList<CustomerId>` (or `StaffId` for the unisex one) | Current occupants, up to `Capacity` |
 | `CleanlinessScore` | `float (0–100)` | Customer bathrooms only — decays by chance on each use (mechanics doc §12), reset by Busser cleaning (§13) or end-of-day processing |
 | `IsClean` | `bool` (derived: `CleanlinessScore >= DirtyThreshold`) | Not stored — same derivation pattern as `TableCluster.State` |
-| `MaxConcurrentCleaners` | `int` | **Added — coherence-check pass.** Caps how many Bussers can usefully work this bathroom at once (a small door-only bathroom needs fewer than a large one) — used only by a tuned/DLC `IStaffTaskPriorityStrategy` that respects it (mechanics doc §13); MVP's default strategy may ignore it. Size-scaled default open, pending playtesting |
+| `MaxConcurrentCleaners` | `int` | Caps how many Bussers can usefully work this bathroom at once (a small door-only bathroom needs fewer than a large one) — used only by a tuned/DLC `IStaffTaskPriorityStrategy` that respects it (mechanics doc §13); MVP's default strategy may ignore it. Size-scaled default open, pending playtesting |
 
 **Queue:** a FIFO wait queue per bathroom, gender-specific for the customer
 ones — same shape as `HeatLamp`'s fixed-slot-capacity pattern, just with a
@@ -1013,8 +1058,8 @@ pattern exactly.
 | Field | Type | Notes |
 |---|---|---|
 | `MealPeriodId` | `string` | Preset key (e.g. `"breakfast"`, `"lunch"`, `"afternoon"`, `"dinner"`) — same pattern as `TableShape.ShapeId`/`KitchenStationType.StationTypeId`. A DLC meal period (e.g. `"happy_hour"`, `"private_event"`) is a new preset entry only — no enum member, no new class, no recompiled assembly. Genuinely data-only: a DLC pack containing just new `MealPeriodDefinition`/`MenuItem`/roster-assignment JSON works without shipping any compiled code at all, since nothing branches on *which* period this is anywhere in the model — only on its time window and which items/staff reference its `MealPeriodId` |
-| `StartTime`, `EndTime` | `TimeOfDay (int Hour, int Minute)` | Time-of-day window, e.g. Lunch 12:00–15:00. Derived against `Restaurant.SimulationTick` via `MinutesPerTick` (entity doc §22) — `TicksPerDay = round(1440 / MinutesPerTick)`, `TimeOfDayTicks = SimulationTick % TicksPerDay` |
-| `ArrivalCutoffTime` | `TimeOfDay?` | **Added — backported from implementation-phase decisions.** Nullable, defaults to `EndTime` if unset. Player-facing: lets a restaurant stop seating new walk-ins before the period's actual close (e.g. dinner runs to 00:00, but arrivals cut off at 21:30 so the kitchen can wind down). Only gates new arrivals — a group already queued or seated before the cutoff is unaffected |
+| `StartTime`, `EndTime` | `TimeOfDay (int Hour, int Minute)` | Time-of-day window, e.g. Lunch 12:00–15:00. Derived against `Restaurant.SimulationTick` via the derived `MinutesPerTick` (entity doc §22 — `GameMinutesPerRealSecond / TicksPerRealSecond`, may be fractional) — `TicksPerDay = round(1440 / MinutesPerTick)`, `TimeOfDayTicks = SimulationTick % TicksPerDay`. **Authoring constraint:** `1440 / MinutesPerTick` must be a whole number (preset-load validation — not yet built, status doc V-06), so ticks-per-day is exact and midnight is hit exactly (mechanics doc §15). **Convention:** an `EndTime` of 00:00 means end of day (24:00); periods wrapping past midnight are not supported |
+| `ArrivalCutoffTime` | `TimeOfDay?` | Nullable, defaults to `EndTime` if unset. Player-facing: lets a restaurant stop seating new walk-ins before the period's actual close (e.g. dinner runs to 00:00, but arrivals cut off at 21:30 so the kitchen can wind down). Only gates new arrivals — a group already queued or seated before the cutoff is unaffected |
 
 `RestaurantConfig.ActiveMealPeriods: IReadOnlyList<MealPeriodDefinition>`
 (entity doc §22, new field) — which periods a given restaurant actually
@@ -1110,20 +1155,60 @@ periods plus DLC extension.
 
 ---
 
-## Entity pass complete (25/24 — Freezer added in coherence-check pass;
-`MealPeriodDefinition` added at §24a in the same pass as an additional,
-uncounted preset-data entity, same treatment as `TableShape`/
-`KitchenStationType`)
+## 24b. SeasonDefinition (preset/data — proposed, not locked)
 
+String-keyed, variable-length season cycle — same extension shape as
+`MealPeriodDefinition`; only the indexing structure exists, the seasonal
+*effects* are fully undesigned (mechanics doc §15).
 
-All entities from the MVP data model are specified above, cross-checked
-against `restaurant-simulator-business-logic.md` and reconciled with prior
-Architecture-chat decisions, including the concurrency-sweep session's
-additions (`Table.IsClean`, derived `TableCluster.State`, `Customer`'s three
-new fields, `TableCluster` joke-fatigue fields, the `Bathroom` entity, and
-`Restaurant.AutoManagerToggles`). Extension points confirmed open for every
-deferred DLC system (Inventory, recipes, ambiance, hiring, marketing,
-seasonality, takeout) without requiring schema rework to core entities.
+| Field | Type | Notes |
+|---|---|---|
+| `SeasonId` | `string` | e.g. `"spring"`, `"holiday_week"` |
+| `DayCount` | `int` | Independent per season (7 is a proposed starting default, not a rule) |
 
-Not yet done, by design: agent files (explicitly scoped to a separate,
-later chat).
+`RestaurantConfig.SeasonCycle: IReadOnlyList<SeasonDefinition>` is not yet a
+field in §22 — it is added when the seasonality DLC is built.
+
+---
+
+## 25. ServiceFlowConfig (nested config record)
+
+`RestaurantConfig.ServiceFlow` (§22): a nested record rather than ~20 flat
+fields (CLAUDE.md principle 3). Holds timings in seconds (e.g.
+`SeatedToFirstVisitSeconds`), ready/refill/dessert chances, price bias and
+eating-duration ranges. Defaults equal the approved values, so a preset that
+omits it simply gets them. **The full field list lives in the service-flow
+draft, which is not yet merged (mechanics doc §17) — to be tabulated here once
+it is.**
+
+---
+
+## 26. DiningVisit / DiningStage
+
+- `DiningVisit`: `Drinks | Main | Refill | Dessert | Bill` — what the next
+  scheduled waiter visit is for (`CustomerGroup.NextVisit`, §8).
+- `DiningStage`: `Ordering | WaitingForFood | Eating | Paying | Leaving` —
+  **derived, never stored** (§8; mechanics doc §17).
+- Wire strings live in Contracts (`DiningVisitNames`, `DiningStageNames`) and
+  are pinned to these member names by tests.
+
+---
+
+## 27. TableMove
+
+Value type `(TableId, From, To)` carried as `Moves` on `ClustersMerged` /
+`ClusterSplit` (with `DurationTicks`); describes one table's slide (mechanics
+doc §18).
+
+---
+
+## Entity pass status
+
+24 numbered entities, plus `Freezer` (§18a), `MealPeriodDefinition` (§24a) and
+the later types §24b–§27 (preset data, nested config, enums, value types). All
+numbered sections are structurally locked; fields marked first-pass or pending
+elsewhere in this doc are tunables, not structural gaps. Extension points are
+open for every deferred DLC system (Inventory, recipes, ambiance, hiring,
+marketing, seasonality, takeout) without schema rework to core entities. The
+agent file (`CLAUDE.md`) exists. Build status and open decisions:
+`restaurant-simulator-status.md`.
