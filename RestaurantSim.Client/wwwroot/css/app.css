@@ -28,8 +28,42 @@ body {
 .floor .table.state-free { fill: #cfe8cf; }
 .floor .table.state-occupied { fill: #f3c97a; }
 .floor .table.state-reserved { fill: #b9c9f0; }
-.floor .table.state-needscleaning { fill: #d9d9d9; stroke: #c0392b; stroke-width: 2; }
-/* Dining stage of the group at an occupied table; after the state rules so it wins. */
+    .floor .table.state-needscleaning {
+        fill: #d9d9d9;
+        stroke: #c0392b;
+        stroke-width: 2;
+    }
+
+    .floor .table.state-moving {
+        fill: #fff3b0;
+        stroke-dasharray: 4 2;
+    }
+
+    /* Tables being pushed together (or back): slide from the old cell to the new one. The view
+   sets --dx/--dy (how far back the old position is) and the duration per table. */
+    .floor .table-slide {
+        animation-name: table-slide;
+        animation-timing-function: linear;
+        animation-fill-mode: both;
+    }
+
+@keyframes table-slide {
+    from {
+        transform: translate(var(--dx), var(--dy));
+    }
+
+    to {
+        transform: translate(0, 0);
+    }
+}
+
+/* Outline of tables that currently form one merged table. */
+.floor .cluster-outline {
+    fill: none;
+    pointer-events: none;
+    stroke: #444;
+    stroke-width: 3;
+}/* Dining stage of the group at an occupied table; after the state rules so it wins. */
 .floor .table.stage-ordering {
     fill: #f3c97a;
 }

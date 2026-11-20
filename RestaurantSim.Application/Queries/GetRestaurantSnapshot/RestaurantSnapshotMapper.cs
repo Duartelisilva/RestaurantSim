@@ -22,8 +22,7 @@ internal static class RestaurantSnapshotMapper
             r.Reputation,
             new FloorDto(
                 floor.Tables.Select(t => new TableDto(
-                    t.TableId, Point(t.Position), Size(t.Hitbox), t.ClusterId, t.IsClean)).ToList(),
-                floor.Clusters.Select(c => new ClusterDto(
+                    t.TableId, Point(t.Position), Size(t.Hitbox), t.ClusterId, t.IsClean, t.IsMoving)).ToList(), floor.Clusters.Select(c => new ClusterDto(
                     c.ClusterId,
                     c.TableIds.ToList(),
                     c.Capacity,

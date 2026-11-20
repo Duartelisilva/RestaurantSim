@@ -15,11 +15,16 @@ public sealed class RestaurantStore
 {
     public RestaurantSnapshotDto? Snapshot { get; private set; }
 
+    // Tables currently sliding, by table id — what the floor view animates. Client-only: a
+    // fresh snapshot (join / reconnect) shows tables where they are, with no animation.
+    public IReadOnlyDictionary<int, TableMotion> Motions { get; private set; } = new Dictionary<int, TableMotion>();
+
     public event Action? Changed;
 
     public void Load(RestaurantSnapshotDto snapshot)
     {
         Snapshot = snapshot;
+        Motions = new Dictionary<int, TableMotion>();
         Changed?.Invoke();
     }
 
@@ -117,6 +122,58 @@ public sealed class RestaurantStore
         return true;
     }
 
+    // Resulting topology, absolute: the merged ids disappear, the survivor owns all the tables,
+    // and the tables that slid are at their new position (and animate from the old one).
+    public bool Apply(ClustersMergedDto e)
+    {
+        if (!TryGetCurrent(e.Tick, out var s))
+            return false;
+
+        var survivor = new ClusterDto(e.ClusterId, e.TableIds, e.Capacity, "Free", null);
+        var clusters = s.Floor.Clusters
+            .Where(c => c.ClusterId != e.ClusterId && !e.MergedClusterIds.Contains(c.ClusterId))
+            .Append(survivor);
+
+        Commit(WithTopology(s, clusters, e.TableIds.Select(id => (id, e.ClusterId)), e.Moves, e.DurationTicks));
+        return true;
+    }
+
+    // The merged cluster is replaced by the original clusters, tables sliding back home.
+    public bool Apply(ClusterSplitDto e)
+    {
+        if (!TryGetCurrent(e.Tick, out var s))
+            return false;
+
+        var restored = e.Restored.Select(r => new ClusterDto(r.ClusterId, r.TableIds, r.Capacity, "Free", null)).ToList();
+        var restoredIds = restored.Select(r => r.ClusterId).ToHashSet();
+        var clusters = s.Floor.Clusters
+            .Where(c => c.ClusterId != e.MergedClusterId && !restoredIds.Contains(c.ClusterId))
+            .Concat(restored);
+
+        var owners = e.Restored.SelectMany(r => r.TableIds.Select(id => (id, r.ClusterId)));
+        Commit(WithTopology(s, clusters, owners, e.Moves, e.DurationTicks));
+        return true;
+    }
+
+    // The cluster's tables have stopped sliding: it is usable again.
+    public bool Apply(TableMoveCompletedDto e)
+    {
+        if (!TryGetCurrent(e.Tick, out var s))
+            return false;
+
+        var cluster = s.Floor.Clusters.FirstOrDefault(c => c.ClusterId == e.ClusterId);
+        if (cluster is null)
+            return true;
+
+        var tables = s.Floor.Tables
+            .Select(t => cluster.TableIds.Contains(t.TableId) ? t with { IsMoving = false } : t)
+            .ToList();
+
+        Commit(s with { Floor = s.Floor with { Tables = tables, Clusters = Recompute(s.Floor.Clusters, tables) } },
+            Motions.Where(m => !cluster.TableIds.Contains(m.Key)).ToDictionary(m => m.Key, m => m.Value));
+        return true;
+    }
+
     public bool Apply(GroupLeftDto e)
     {
         if (!TryGetCurrent(e.Tick, out var s))
@@ -165,6 +222,40 @@ public sealed class RestaurantStore
         Changed?.Invoke();
     }
 
+    private void Commit(RestaurantSnapshotDto next, IReadOnlyDictionary<int, TableMotion> motions)
+    {
+        Motions = motions;
+        Commit(next);
+    }
+
+    // Shared by merge and split: new clusters, which cluster owns which table, and the slides.
+    // A table that slides is Moving (so its cluster derives as Moving) until TableMoveCompleted.
+    private RestaurantSnapshotDto WithTopology(
+        RestaurantSnapshotDto s,
+        IEnumerable<ClusterDto> clusters,
+        IEnumerable<(int TableId, int ClusterId)> owners,
+        IReadOnlyList<TableMoveDto> moves,
+        long durationTicks)
+    {
+        var ownerOf = owners.ToDictionary(o => o.TableId, o => o.ClusterId);
+        var moveOf = moves.ToDictionary(m => m.TableId);
+
+        var tables = s.Floor.Tables.Select(t =>
+        {
+            var next = ownerOf.TryGetValue(t.TableId, out var clusterId) ? t with { ClusterId = clusterId } : t;
+            return moveOf.TryGetValue(t.TableId, out var move) ? next with { Position = move.To, IsMoving = true } : next;
+        }).ToList();
+
+        var seconds = durationTicks / (double)Math.Max(1, s.TicksPerRealSecond);
+        var motions = Motions.Where(m => !moveOf.ContainsKey(m.Key)).ToDictionary(m => m.Key, m => m.Value);
+        foreach (var move in moves)
+            motions[move.TableId] = new TableMotion(move.From, move.To, seconds);
+
+        Motions = motions;
+        var ordered = clusters.OrderBy(c => c.ClusterId).ToList();
+        return s with { Floor = s.Floor with { Tables = tables, Clusters = Recompute(ordered, tables) } };
+    }
+
     private static List<ClusterDto> Recompute(IReadOnlyList<ClusterDto> clusters, IReadOnlyList<TableDto> tables)
     {
         return clusters.Select(c => c with { State = DeriveState(c, tables) }).ToList();
@@ -176,6 +267,9 @@ public sealed class RestaurantStore
     // Reservations exist.
     private static string DeriveState(ClusterDto cluster, IReadOnlyList<TableDto> tables)
     {
+        if (tables.Any(t => cluster.TableIds.Contains(t.TableId) && t.IsMoving))
+            return "Moving";
+
         var needsCleaning = tables.Any(t => cluster.TableIds.Contains(t.TableId) && !t.IsClean);
         if (needsCleaning)
             return "NeedsCleaning";

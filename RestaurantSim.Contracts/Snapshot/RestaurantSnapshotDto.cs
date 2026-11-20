@@ -9,7 +9,8 @@ public sealed record TableDto(
     GridPointDto Position,
     GridSizeDto Size,
     int? ClusterId,
-    bool IsClean);
+    bool IsClean,
+    bool IsMoving);
 
 public sealed record ClusterDto(
     int ClusterId,

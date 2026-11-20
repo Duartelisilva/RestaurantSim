@@ -43,7 +43,7 @@ public class FloorLabelsTests
     public void Occupancy_TableWithoutCluster_IsNull()
     {
         var snapshot = BuildSnapshot(occupiedBy: 7);
-        var loose = new TableDto(99, new GridPointDto(9, 9), new GridSizeDto(1, 1), null, true);
+        var loose = new TableDto(99, new GridPointDto(9, 9), new GridSizeDto(1, 1), null, true, false);
 
         FloorLabels.Occupancy(snapshot, loose).Should().BeNull();
     }
@@ -79,8 +79,8 @@ public class FloorLabelsTests
         Guid.NewGuid(), 0, 1, 1, 0, 0m, 0f,
         new FloorDto(
             [
-                new TableDto(1, new GridPointDto(0, 0), new GridSizeDto(1, 1), 1, true),
-                new TableDto(2, new GridPointDto(1, 0), new GridSizeDto(1, 1), 1, true)
+                new TableDto(1, new GridPointDto(0, 0), new GridSizeDto(1, 1), 1, true, false),
+                new TableDto(2, new GridPointDto(1, 0), new GridSizeDto(1, 1), 1, true, false)
             ],
             [new ClusterDto(1, [1, 2], 4, occupiedBy is null ? "Free" : "Occupied", occupiedBy)],
             [], [], [], []),

@@ -273,9 +273,9 @@ public class RestaurantStoreTests
         Guid.NewGuid(), tick, 1, 1, 0, 0m, 0f,
         new FloorDto(
             [
-                new TableDto(1, new GridPointDto(0, 0), new GridSizeDto(1, 1), 1, true),
-                new TableDto(2, new GridPointDto(2, 0), new GridSizeDto(1, 1), 2, true),
-                new TableDto(3, new GridPointDto(3, 0), new GridSizeDto(1, 1), 2, true)
+                new TableDto(1, new GridPointDto(0, 0), new GridSizeDto(1, 1), 1, true, false),
+                new TableDto(2, new GridPointDto(2, 0), new GridSizeDto(1, 1), 2, true, false),
+                new TableDto(3, new GridPointDto(3, 0), new GridSizeDto(1, 1), 2, true, false)
             ],
             [new ClusterDto(1, [1], 2, "Free", null), new ClusterDto(2, [2, 3], 4, "Free", null)],
             [], [], [], []),

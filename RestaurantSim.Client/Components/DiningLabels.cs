@@ -1,3 +1,4 @@
+using RestaurantSim.Contracts.Events;
 using RestaurantSim.Contracts.Snapshot;
 
 namespace RestaurantSim.Client.Components;
@@ -22,7 +23,17 @@ public static class DiningLabels
         DiningStageNames.Leaving => "leaving",
         _ => stage
     };
+    public static string TurnedAway(string reason) => reason switch
+    {
+        TurnedAwayReasonNames.QueueFull => "queue full",
+        TurnedAwayReasonNames.PartyTooLarge => "party too large for any table",
+        _ => reason
+    };
 
-    // "stage-waitingforfood" etc. — styled in app.css next to the table state classes.
+    // "T3 + T4" — table ids in order.
+    public static string TableList(IEnumerable<int> tableIds) =>
+        string.Join(" + ", tableIds.Order().Select(id => $"T{id}"));
+
+    // "stage-waitingforfood" etc.
     public static string CssClass(string stage) => "stage-" + stage.ToLowerInvariant();
 }

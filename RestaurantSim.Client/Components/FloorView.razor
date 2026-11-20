@@ -1,3 +1,5 @@
+@using System.Globalization
+@using RestaurantSim.Client.State
 @using RestaurantSim.Contracts.Snapshot
 
 @if (Snapshot is { } s)
@@ -23,12 +25,22 @@
         }
         @foreach (var t in s.Floor.Tables)
         {
-			var group = FloorLabels.DiningGroup(s, t);
-			var css = "table state-" + StateOf(s.Floor, t).ToLowerInvariant()
-				+ (group is null ? "" : " " + DiningLabels.CssClass(group.Stage));
-			var tooltip = group is null ? null : $"Group {group.GroupId} — {DiningLabels.Describe(group.Stage, group.NextVisit)}";
-			@Box(css, t.Position, t.Size, $"T{t.TableId}", FloorLabels.Occupancy(s, t), tooltip)
-		}
+            var group = FloorLabels.DiningGroup(s, t);
+            var css = "table state-" + StateOf(s.Floor, t).ToLowerInvariant()
+                + (group is null ? "" : " " + DiningLabels.CssClass(group.Stage));
+            var tooltip = group is null ? null : $"Group {group.GroupId} — {DiningLabels.Describe(group.Stage, group.NextVisit)}";
+            @Box(css, t.Position, t.Size, $"T{t.TableId}", FloorLabels.Occupancy(s, t), tooltip, SlideOf(t))
+        }
+        @* Tables pushed together read as one table: outline them once they have arrived. *@
+        @foreach (var cluster in s.Floor.Clusters.Where(c => c.TableIds.Count > 1 && c.State != "Moving"))
+        {
+            if (FloorLabels.ClusterBounds(s, cluster) is { } box)
+            {
+                <rect class="cluster-outline" x="@(box.X * Cell)" y="@(box.Y * Cell)" width="@(box.Width * Cell)" height="@(box.Height * Cell)">
+                    <title>Merged table (@cluster.Capacity seats)</title>
+                </rect>
+            }
+        }
     </svg>
 }
 
@@ -38,13 +50,30 @@
     [Parameter]
     public RestaurantSnapshotDto? Snapshot { get; set; }
 
+    // Tables currently sliding, by table id (RestaurantStore.Motions).
+    [Parameter]
+    public IReadOnlyDictionary<int, TableMotion>? Motions { get; set; }
+
     // Assumes Position is the top-left cell of the hitbox, Y growing downwards.
-	private RenderFragment Box(string css, GridPointDto pos, GridSizeDto size, string label, string? detail = null, string? tooltip = null) => @<g>
-			<title>@tooltip</title>
+    private RenderFragment Box(string css, GridPointDto pos, GridSizeDto size, string label, string? detail = null, string? tooltip = null, string? slide = null) => @<g class="@(slide is null ? null : "table-slide")" style="@slide">
+        <title>@tooltip</title>
         <rect class="@css" x="@(pos.X * Cell)" y="@(pos.Y * Cell)" width="@(size.Width * Cell)" height="@(size.Height * Cell)" />
         <text x="@(pos.X * Cell + 4)" y="@(pos.Y * Cell + 14)">@label</text>
         <text x="@(pos.X * Cell + 4)" y="@(pos.Y * Cell + 30)" font-weight="600">@detail</text>
     </g>;
+
+    // The inline style of a sliding table: start offset (the old cell, relative to where the
+    // table now is) and duration; the .table-slide animation moves it to offset zero.
+    private string? SlideOf(TableDto table)
+    {
+        if (Motions is null || !Motions.TryGetValue(table.TableId, out var motion))
+            return null;
+
+        var dx = (motion.From.X - motion.To.X) * Cell;
+        var dy = (motion.From.Y - motion.To.Y) * Cell;
+        var seconds = motion.DurationSeconds.ToString("0.###", CultureInfo.InvariantCulture);
+        return $"--dx:{dx}px;--dy:{dy}px;animation-duration:{seconds}s";
+    }
 
     private static string StateOf(FloorDto floor, TableDto table)
     {

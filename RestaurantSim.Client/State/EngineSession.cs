@@ -35,6 +35,9 @@ public sealed class EngineSession : IDisposable
         _engine.GroupAbandonedQueue += OnGroupAbandonedQueue;
         _engine.GroupSeated += OnGroupSeated;
         _engine.GroupDiningStageChanged += OnGroupDiningStageChanged;
+        _engine.ClustersMerged += OnClustersMerged;
+        _engine.ClusterSplit += OnClusterSplit;
+        _engine.TableMoveCompleted += OnTableMoveCompleted;
         _engine.GroupLeft += OnGroupLeft;
         _engine.TableCleaned += OnTableCleaned;
         _engine.BillPaid += OnBillPaid;
@@ -184,7 +187,7 @@ public sealed class EngineSession : IDisposable
     private void OnGroupTurnedAway(GroupTurnedAwayDto dto)
     {
         if (_store.Apply(dto))
-            AddLog($"[tick {dto.Tick}] a group was turned away (queue full)");
+            AddLog($"[tick {dto.Tick}] a group was turned away ({DiningLabels.TurnedAway(dto.Reason)})");
     }
 
     private void OnBillPaid(BillPaidDto dto)
@@ -204,6 +207,21 @@ public sealed class EngineSession : IDisposable
         if (_store.Apply(dto))
             AddLog($"[tick {dto.Tick}] group {dto.GroupId} seated at cluster {dto.ClusterId}");
     }
+
+    private void OnClustersMerged(ClustersMergedDto dto)
+    {
+        if (_store.Apply(dto))
+            AddLog($"[tick {dto.Tick}] tables {DiningLabels.TableList(dto.TableIds)} pushed together ({dto.Capacity} seats)");
+    }
+
+    private void OnClusterSplit(ClusterSplitDto dto)
+    {
+        if (_store.Apply(dto))
+            AddLog($"[tick {dto.Tick}] tables {DiningLabels.TableList(dto.Restored.SelectMany(r => r.TableIds))} moved back apart");
+    }
+
+    // No log line: the slide ending is not news, it just makes the table usable again.
+    private void OnTableMoveCompleted(TableMoveCompletedDto dto) => _store.Apply(dto);
 
     private void OnGroupDiningStageChanged(GroupDiningStageChangedDto dto)
     {
@@ -248,6 +266,9 @@ public sealed class EngineSession : IDisposable
         _engine.GroupAbandonedQueue -= OnGroupAbandonedQueue;
         _engine.GroupSeated -= OnGroupSeated;
         _engine.GroupDiningStageChanged -= OnGroupDiningStageChanged;
+        _engine.ClustersMerged -= OnClustersMerged;
+        _engine.ClusterSplit -= OnClusterSplit;
+        _engine.TableMoveCompleted -= OnTableMoveCompleted;
         _engine.GroupLeft -= OnGroupLeft;
         _engine.TableCleaned -= OnTableCleaned;
         _engine.BillPaid -= OnBillPaid;
