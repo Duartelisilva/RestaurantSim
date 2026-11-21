@@ -23,6 +23,7 @@ public interface IEngineClient : IAsyncDisposable
     event Action<ClustersMergedDto>? ClustersMerged;
     event Action<ClusterSplitDto>? ClusterSplit;
     event Action<TableMoveCompletedDto>? TableMoveCompleted;
+    event Action<StaffStateChangedDto>? StaffStateChanged;
     event Action<GroupLeftDto>? GroupLeft;
     event Action<TableCleanedDto>? TableCleaned;
     event Action<BillPaidDto>? BillPaid;

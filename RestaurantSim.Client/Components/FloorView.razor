@@ -41,11 +41,21 @@
                 </rect>
             }
         }
+        @* Staff: one small circle each, on the spot they stand on. *@
+        @foreach (var st in s.Staff)
+        {
+            <g class="staff @StaffLabels.RoleClass(st.Role) @StaffLabels.StateClass(st.State)">
+                <title>@StaffLabels.Summary(st)</title>
+                <circle cx="@(st.Position.X * Cell + Cell / 2)" cy="@(st.Position.Y * Cell + Cell / 2)" r="@StaffRadius" />
+                <text x="@(st.Position.X * Cell + Cell / 2)" y="@(st.Position.Y * Cell + Cell / 2)">@StaffLabels.Initial(st.Role)</text>
+            </g>
+        }
     </svg>
 }
 
 @code {
     private const int Cell = 40;
+    private const int StaffRadius = 11;
 
     [Parameter]
     public RestaurantSnapshotDto? Snapshot { get; set; }

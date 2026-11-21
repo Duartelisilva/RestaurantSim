@@ -133,6 +133,39 @@ public class CreateRestaurantCommandHandlerTests
     }
 
     [Fact]
+    public async Task Handle_PutsEachStaffMemberOnTheirIdleSpotAsync()
+    {
+        _presetRepository.GetAsync("default_diner", Arg.Any<CancellationToken>()).Returns(BuildConfig());
+        _layoutRepository.GetByIdAsync("default_diner_layout", Arg.Any<CancellationToken>()).Returns(BuildLayout());
+
+        Restaurant? savedRestaurant = null;
+        await _repository.SaveAsync(Arg.Do<Restaurant>(r => savedRestaurant = r), Arg.Any<CancellationToken>());
+
+        await _handler.Handle(new CreateRestaurantCommand("default_diner"), CancellationToken.None);
+
+        savedRestaurant!.StaffRoster.Staff.Select(s => (s.Name, s.Position)).Should().Equal(
+            ("Host 1", new GridPosition(8, 3)),
+            ("Waiter 1", new GridPosition(5, 3)),
+            ("Waiter 2", new GridPosition(5, 4)));
+        savedRestaurant.StaffRoster.Staff.Should().OnlyContain(s => s.Position == s.HomePosition);
+    }
+
+    [Fact]
+    public async Task Handle_RejectsALayoutWithTooFewIdleSpots_AndCreatesNothingAsync()
+    {
+        var spots = DefaultSpots();
+        spots[StaffRole.Waiter] = new[] { new GridPosition(5, 3) }; // the roster has two waiters
+        _presetRepository.GetAsync("default_diner", Arg.Any<CancellationToken>()).Returns(BuildConfig());
+        _layoutRepository.GetByIdAsync("default_diner_layout", Arg.Any<CancellationToken>()).Returns(BuildLayout(spots));
+
+        var result = await _handler.Handle(new CreateRestaurantCommand("default_diner"), CancellationToken.None);
+
+        result.IsFailure.Should().BeTrue();
+        result.Error.Should().Contain("Waiter");
+        await _repository.DidNotReceiveWithAnyArgs().SaveAsync(default!, default);
+    }
+
+    [Fact]
     public async Task Handle_ReturnsFailure_WhenLayoutDoesNotExistAsync()
     {
         _presetRepository.GetAsync("default_diner", Arg.Any<CancellationToken>()).Returns(BuildConfig());
@@ -171,7 +204,14 @@ public class CreateRestaurantCommandHandlerTests
         BaseArrivalIntervalSeconds = 120f
     };
 
-    private static RestaurantLayout BuildLayout()
+    // Idle spots for the test roster (1 host, 2 waiters) unless a test passes its own.
+    private static Dictionary<StaffRole, IReadOnlyList<GridPosition>> DefaultSpots() => new()
+    {
+        [StaffRole.Host] = new[] { new GridPosition(8, 3) },
+        [StaffRole.Waiter] = new[] { new GridPosition(5, 3), new GridPosition(5, 4) }
+    };
+
+    private static RestaurantLayout BuildLayout(Dictionary<StaffRole, IReadOnlyList<GridPosition>>? staffSpots = null)
     {
         var shape = new TableShape { ShapeId = "standard_2top", SeatDefinitions = Array.Empty<SeatDefinition>(), CanMerge = false };
         var table = new Table
@@ -198,7 +238,8 @@ public class CreateRestaurantCommandHandlerTests
             KitchenStations = new List<KitchenStation> { station },
             HeatLamps = new List<HeatLamp> { heatLamp },
             Freezers = new List<Freezer> { freezer },
-            Bathrooms = bathrooms
+            Bathrooms = bathrooms,
+            StaffSpots = staffSpots ?? DefaultSpots()
         };
     }
 }

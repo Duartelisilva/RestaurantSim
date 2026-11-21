@@ -45,11 +45,17 @@ public sealed record FloorDto(
     IReadOnlyList<FixtureDto> Freezers,
     IReadOnlyList<BathroomDto> Bathrooms);
 
+// Position is where the staff member stands now; TaskType/TaskTargetId are null without a task;
+// Fatigue is 0..1. Names: StaffRoleNames, StaffStateNames, TaskTypeNames.
 public sealed record StaffDto(
     int StaffId,
     string Name,
     string Role,
-    string State);
+    string State,
+    GridPointDto Position,
+    string? TaskType,
+    int? TaskTargetId,
+    float Fatigue);
 
 public sealed record QueuedGroupDto(
     int GroupId,

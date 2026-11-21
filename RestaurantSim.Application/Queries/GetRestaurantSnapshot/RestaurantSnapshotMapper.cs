@@ -2,6 +2,7 @@ using RestaurantSim.Contracts.Snapshot;
 using RestaurantSim.Domain;
 using RestaurantSim.Domain.CustomerService;
 using RestaurantSim.Domain.Floor;
+using RestaurantSim.Domain.Staff;
 
 namespace RestaurantSim.Application.Queries.GetRestaurantSnapshot;
 
@@ -38,7 +39,8 @@ internal static class RestaurantSnapshotMapper
                     b.BathroomId, b.Gender.ToString(), Point(b.Position), Size(b.Hitbox),
                     b.CleanlinessScore)).ToList()),
             r.StaffRoster.Staff.Select(s => new StaffDto(
-                s.StaffId, s.Name, s.Role.ToString(), s.State.ToString())).ToList(),
+                s.StaffId, s.Name, s.Role.ToString(), s.State.ToString(), Point(s.Position),
+                s.CurrentTaskType?.ToString(), s.CurrentTaskTargetId, s.Stats.Get(StatType.Fatigue))).ToList(),
             service.Queue.Select(g => new QueuedGroupDto(g.GroupId, g.PartySize)).ToList(),
             service.ActiveGroups.Select(g => new ActiveGroupDto(
                 g.GroupId, g.PartySize, g.ClusterId,

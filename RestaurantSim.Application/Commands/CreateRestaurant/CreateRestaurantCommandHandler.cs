@@ -35,6 +35,10 @@ public sealed class CreateRestaurantCommandHandler : IRequestHandler<CreateResta
         if (layout is null)
             return Result<Guid>.Failure($"Layout '{config.TableLayoutId}' does not exist.");
 
+        var staff = SeedStaff(config, layout);
+        if (staff.IsFailure)
+            return Result<Guid>.Failure(staff.Error ?? "The staff roster could not be seeded.");
+
         var restaurant = new Restaurant
         {
             RestaurantId = Guid.NewGuid(),
@@ -55,7 +59,7 @@ public sealed class CreateRestaurantCommandHandler : IRequestHandler<CreateResta
                 Bathrooms = layout.Bathrooms.ToList(),
                 MaxMergeGapCells = TableMoveTiming.MaxMergeGapCells(config)
             },
-            StaffRoster = new StaffRosterState { Staff = SeedStaff(config) },
+            StaffRoster = new StaffRosterState { Staff = staff.Value ?? new List<StaffMember>() },
             CustomerService = new CustomerServiceState(),
             KitchenOps = new KitchenOpsState(),
             Events = new EventState(),
@@ -70,7 +74,9 @@ public sealed class CreateRestaurantCommandHandler : IRequestHandler<CreateResta
         return Result<Guid>.Success(restaurant.RestaurantId);
     }
 
-    private static List<StaffMember> SeedStaff(RestaurantConfig config)
+    // Every staff member needs an idle spot from the layout (nth of a role -> nth spot); a layout
+    // that has too few is rejected before anything is created.
+    private static Result<List<StaffMember>> SeedStaff(RestaurantConfig config, RestaurantLayout layout)
     {
         var staff = new List<StaffMember>();
         var nextId = 1;
@@ -78,6 +84,11 @@ public sealed class CreateRestaurantCommandHandler : IRequestHandler<CreateResta
 
         foreach (var (role, count) in config.StaffRosterSeed)
         {
+            var spots = layout.StaffSpots.GetValueOrDefault(role) ?? Array.Empty<GridPosition>();
+            if (spots.Count < count)
+                return Result<List<StaffMember>>.Failure(
+                    $"Layout '{config.TableLayoutId}' has {spots.Count} idle spot(s) for {role}, the roster needs {count}.");
+
             for (var i = 1; i <= count; i++)
             {
                 var stats = new StaffStats();
@@ -95,11 +106,12 @@ public sealed class CreateRestaurantCommandHandler : IRequestHandler<CreateResta
                     Role = role,
                     State = StaffState.Idle,
                     Stats = stats,
-                    AssignedMealPeriods = assignedPeriods
+                    AssignedMealPeriods = assignedPeriods,
+                    Position = spots[i - 1]
                 });
             }
         }
 
-        return staff;
+        return Result<List<StaffMember>>.Success(staff);
     }
 }

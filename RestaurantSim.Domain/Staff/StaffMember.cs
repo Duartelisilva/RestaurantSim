@@ -1,3 +1,5 @@
+using RestaurantSim.Domain.Floor;
+
 namespace RestaurantSim.Domain.Staff;
 
 public enum StaffRole
@@ -47,6 +49,28 @@ public sealed class StaffMember
     public int? CurrentTaskTargetId { get; set; }
 
     public required StaffStats Stats { get; init; }
+
+    // Where the staff member stands NOW. For now (no movement yet) always the idle spot the
+    // layout gave them; movement will change it. The first value it is given is also the
+    // HomePosition (same pattern as Table, entity doc §3): where they go back to when idle.
+    public GridPosition Position
+    {
+        get => _position;
+        set
+        {
+            _homePosition ??= value;
+            _position = value;
+        }
+    }
+
+    public GridPosition HomePosition
+    {
+        get => _homePosition ?? _position;
+        init => _homePosition = value;
+    }
+
+    private GridPosition _position;
+    private GridPosition? _homePosition;
 
     // References MealPeriodDefinition.MealPeriodId; validated as a subset of
     // Restaurant's own ActiveMealPeriods at assignment/hire time.

@@ -40,6 +40,7 @@ builder.Services.AddMediatR(cfg =>
 }); builder.Services.AddValidatorsFromAssembly(typeof(SeatGroupCommandValidator).Assembly);
 builder.Services.AddTransient(typeof(IPipelineBehavior<,>), typeof(RestaurantLockBehavior<,>));
 builder.Services.AddTransient(typeof(IPipelineBehavior<,>), typeof(ValidationBehavior<,>));
+builder.Services.AddTransient(typeof(IPipelineBehavior<,>), typeof(StaffStateChangeBehavior<,>)); // innermost: inside the lock, around the handler only
 builder.Services.AddSignalR();
 builder.Services.AddCors(options =>
 {

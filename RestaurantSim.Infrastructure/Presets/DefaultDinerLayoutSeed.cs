@@ -1,5 +1,6 @@
 using System.Numerics;
 using RestaurantSim.Domain.Floor;
+using RestaurantSim.Domain.Staff;
 
 namespace RestaurantSim.Infrastructure.Presets;
 
@@ -71,9 +72,22 @@ public static class DefaultDinerLayoutSeed
             KitchenStations = stations,
             HeatLamps = new List<HeatLamp> { heatLamp },
             Freezers = new List<Freezer> { freezer },
-            Bathrooms = bathrooms
+            Bathrooms = bathrooms,
+            StaffSpots = StaffSpots()
         };
     }
+
+    // Where idle staff stand (presets.md, staff idle spots): the host by the entrance side, waiters
+    // at the east end of the walkway, cooks behind their stations, the busser out of the way.
+    // First-pass coordinates; a role may have more spots than the roster uses.
+    private static Dictionary<StaffRole, IReadOnlyList<GridPosition>> StaffSpots() => new()
+    {
+        [StaffRole.Host] = new[] { new GridPosition(8, 3) },
+        [StaffRole.Waiter] = new[] { new GridPosition(5, 3), new GridPosition(5, 4) },
+        [StaffRole.Cook] = new[] { new GridPosition(0, 5), new GridPosition(1, 5), new GridPosition(3, 5) },
+        [StaffRole.HeadChef] = new[] { new GridPosition(4, 5) },
+        [StaffRole.Busser] = new[] { new GridPosition(6, 5) }
+    };
 
     private static Table CreateTable(int id, TableShape shape, GridPosition position, int clusterId)
     {

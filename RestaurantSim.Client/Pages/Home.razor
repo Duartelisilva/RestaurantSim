@@ -34,13 +34,13 @@
                 }
             </ul>
 
-            <h3>Staff (as at join)</h3>
-            <ul>
-                @foreach (var st in snapshot.Staff)
-                {
-                    <li>@st.Name — @st.Role, @st.State</li>
-                }
-            </ul>
+				<h3>Staff</h3>
+				<ul>
+				@foreach (var st in snapshot.Staff)
+				{
+							<li>@StaffLabels.Summary(st)</li>
+				}
+				</ul>
 
             <h3>Live events</h3>
             <ul>

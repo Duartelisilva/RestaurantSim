@@ -24,6 +24,7 @@ public sealed class SignalREngineClient : IEngineClient
         _connection.On<ClustersMergedDto>(ClientEventNames.ClustersMerged, dto => ClustersMerged?.Invoke(dto));
         _connection.On<ClusterSplitDto>(ClientEventNames.ClusterSplit, dto => ClusterSplit?.Invoke(dto));
         _connection.On<TableMoveCompletedDto>(ClientEventNames.TableMoveCompleted, dto => TableMoveCompleted?.Invoke(dto));
+        _connection.On<StaffStateChangedDto>(ClientEventNames.StaffStateChanged, dto => StaffStateChanged?.Invoke(dto));
         _connection.On<GroupLeftDto>(ClientEventNames.GroupLeft, dto => GroupLeft?.Invoke(dto));
         _connection.On<TableCleanedDto>(ClientEventNames.TableCleaned, dto => TableCleaned?.Invoke(dto));
         _connection.On<BillPaidDto>(ClientEventNames.BillPaid, dto => BillPaid?.Invoke(dto));
@@ -46,6 +47,7 @@ public sealed class SignalREngineClient : IEngineClient
     public event Action<ClustersMergedDto>? ClustersMerged;
     public event Action<ClusterSplitDto>? ClusterSplit;
     public event Action<TableMoveCompletedDto>? TableMoveCompleted;
+    public event Action<StaffStateChangedDto>? StaffStateChanged;
     public event Action<GroupLeftDto>? GroupLeft;
     public event Action<TableCleanedDto>? TableCleaned;
     public event Action<BillPaidDto>? BillPaid;

@@ -28,12 +28,33 @@ public sealed class RestaurantStore
         Changed?.Invoke();
     }
 
+    // Absolute state of one staff member. A staff member the client does not know (hired after
+    // the snapshot) is ignored, like a group it never saw seated.
+    public bool Apply(StaffStateChangedDto e)
+    {
+        if (!TryGetCurrent(e.Tick, out var s))
+            return false;
+
+        if (s.Staff.All(m => m.StaffId != e.StaffId))
+            return true;
+
+        Commit(s with
+        {
+            Staff = s.Staff
+                .Select(m => m.StaffId == e.StaffId
+                    ? m with { State = e.State, TaskType = e.TaskType, TaskTargetId = e.TaskTargetId, Fatigue = e.Fatigue }
+                    : m)
+                .ToList()
+        });
+        return true;
+    }
+
     public bool Apply(GroupArrivedDto e)
     {
         if (!TryGetCurrent(e.Tick, out var s))
             return false;
 
-        var known = s.Queue.Any(g => g.GroupId == e.GroupId) || s.ActiveGroups.Any(g => g.GroupId == e.GroupId);
+        var known = s.Queue.Any(g => g.GroupId == e.GroupId);
         var queue = known ? s.Queue : s.Queue.Append(new QueuedGroupDto(e.GroupId, e.PartySize)).ToList();
 
         Commit(s with { Queue = queue });

@@ -38,6 +38,7 @@ public sealed class EngineSession : IDisposable
         _engine.ClustersMerged += OnClustersMerged;
         _engine.ClusterSplit += OnClusterSplit;
         _engine.TableMoveCompleted += OnTableMoveCompleted;
+        _engine.StaffStateChanged += OnStaffStateChanged;
         _engine.GroupLeft += OnGroupLeft;
         _engine.TableCleaned += OnTableCleaned;
         _engine.BillPaid += OnBillPaid;
@@ -223,6 +224,10 @@ public sealed class EngineSession : IDisposable
     // No log line: the slide ending is not news, it just makes the table usable again.
     private void OnTableMoveCompleted(TableMoveCompletedDto dto) => _store.Apply(dto);
 
+    // No log line: staff change task every few seconds, it would drown the log. The panel
+    // and the floor show it.
+    private void OnStaffStateChanged(StaffStateChangedDto dto) => _store.Apply(dto);
+
     private void OnGroupDiningStageChanged(GroupDiningStageChangedDto dto)
     {
         if (_store.Apply(dto))
@@ -269,6 +274,7 @@ public sealed class EngineSession : IDisposable
         _engine.ClustersMerged -= OnClustersMerged;
         _engine.ClusterSplit -= OnClusterSplit;
         _engine.TableMoveCompleted -= OnTableMoveCompleted;
+        _engine.StaffStateChanged -= OnStaffStateChanged;
         _engine.GroupLeft -= OnGroupLeft;
         _engine.TableCleaned -= OnTableCleaned;
         _engine.BillPaid -= OnBillPaid;

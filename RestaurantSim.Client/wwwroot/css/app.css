@@ -87,7 +87,52 @@ body {
 .floor .station {
     fill: #9ec5e8;
 }
-.floor .heatlamp { fill: #f08a4b; }
+.floor .heatlamp {
+    fill: #f08a4b;
+}
+
+/* Staff: small role-coloured circles; busy ones get a bright ring, off-shift ones fade. */
+.floor .staff circle {
+    stroke: #222;
+    stroke-width: 1.5;
+}
+
+.floor .staff text {
+    dominant-baseline: central;
+    fill: #fff;
+    font-size: 9px;
+    font-weight: 700;
+    text-anchor: middle;
+}
+
+.floor .staff.role-waiter circle {
+    fill: #2a7fbf;
+}
+
+.floor .staff.role-host circle {
+    fill: #8e44ad;
+}
+
+.floor .staff.role-cook circle {
+    fill: #c0562b;
+}
+
+.floor .staff.role-headchef circle {
+    fill: #8c2f1d;
+}
+
+.floor .staff.role-busser circle {
+    fill: #3a8f5a;
+}
+
+.floor .staff.staff-busy circle {
+    stroke: #f1c40f;
+    stroke-width: 3;
+}
+
+.floor .staff.staff-offshift {
+    opacity: 0.3;
+}
 .floor .freezer { fill: #bfe3f0; }
 .floor .bathroom { fill: #c9b6e4; }
 
